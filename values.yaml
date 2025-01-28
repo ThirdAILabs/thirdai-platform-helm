@@ -53,4 +53,4 @@ env:
   IDENTITY_PROVIDER: "my-idp"
   KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
   USE_SSL_IN_LOGIN: "true"
-  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"
+  DATABASE_URI: "postgresql://postgres:demo_machine@database-1.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/postgres"

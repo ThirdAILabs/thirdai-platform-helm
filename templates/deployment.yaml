@@ -37,12 +37,12 @@ spec:
             value: "{{ $value }}"
           {{- end }}
 
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: http
-          initialDelaySeconds: 5
-          periodSeconds: 10
+        # livenessProbe:
+        #   httpGet:
+        #     path: /api/health
+        #     port: http
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /api/health

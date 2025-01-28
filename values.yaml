@@ -2,12 +2,11 @@ replicaCount: 1
 
 # Docker image settings
 image:
-  repository: "my-docker-registry.com/thirdai_platform_main"
-  tag: "v1.0.0"
+  repository: "thirdaiplatform.azurecr.io/thirdai_platform_release-test-main"
+  tag: "v2.0.0"
   pullPolicy: IfNotPresent
 
-# The name of the Docker credentials secret that you created with kubectl create secret ...
-dockerCredentialsSecret: "docker-credentials-secret"
+dockerCredentialsSecret: "acr-pull-secret"
 
 service:
   port: 80
@@ -16,7 +15,7 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   enabled: true
-  className: "nginx"    
+  className: "nginx"
   hostname: "example.com"
   path: "/api"
   tls: false
@@ -54,3 +53,4 @@ env:
   IDENTITY_PROVIDER: "my-idp"
   KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
   USE_SSL_IN_LOGIN: "true"
+  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"

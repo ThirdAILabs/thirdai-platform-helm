@@ -1,0 +1,12 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-0d3e07d89ce7898e5   # your EFS ID
+  directoryPerms: "700"
+  basePath: "/thirdai_platform/dynamic_provisioning"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer

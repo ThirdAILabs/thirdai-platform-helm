@@ -13,3 +13,5 @@ Steps to create an EKS cluster:
 6. Run `kubectl config use-context <context-name>` with your Kubernetes cluster context. You can run `kubectl config view` to see your contexts
 7. Run `kubectl create secret docker-registry docker-credentials-secret --docker-server=thirdaiplatform.azurecr.io --docker-username=thirdaiplatform-pull-release-test-main --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj'` to add the docker credential secret to your runtime (this docker credential doesn't need to be a secret, but for now this is how we can add secrets in the CLI)
 8. Run `helm install thirdaiplatform .` in this repo's head directory to launch modelbazaar
+9. For running hashicorp vault with kubernetes, following the following commands
+https://developer.hashicorp.com/vault/docs/platform/k8s/helm

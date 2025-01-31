@@ -5,7 +5,8 @@ metadata:
 provisioner: efs.csi.aws.com
 parameters:
   provisioningMode: efs-ap
-  fileSystemId: fs-0d3e07d89ce7898e5   # your EFS ID
+  fileSystemId: fs-0ebb0682a83d9b30f  # your EFS ID
+  accessPointId: fsap-0342ca79638bdb424
   directoryPerms: "700"
   basePath: "/thirdai_platform/dynamic_provisioning"
 reclaimPolicy: Retain

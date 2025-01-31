@@ -8,40 +8,37 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
   cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
-  
+
   enable_cluster_creator_admin_permissions = true
 
 
   enable_irsa = true
 
-  # Example cluster addons
   cluster_addons = {
-    coredns   = {}
-    kube-proxy = {}
-    vpc-cni   = {
-      version                     = "latest"
-      resolve_conflicts           = "OVERWRITE"
-      service_account_role_name   = "${var.cluster_name}-vpc-cni-irsa-role"
-      service_account_role_policy_arns = [
-        "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-      ]
+    vpc-cni = {
+      version           = "latest"
+      resolve_conflicts = "OVERWRITE"
+
     }
     aws-ebs-csi-driver = {
-      service_account_role_name   = "${var.cluster_name}-ebs-csi-irsa-role"
-      service_account_role_policy_arns = [
-        "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicy"
-      ]
+
       version = "latest"
     }
     aws-efs-csi-driver = {
-      service_account_role_name   = "${var.cluster_name}-efs-csi-irsa-role"
-      service_account_role_policy_arns = [
-        "arn:aws:iam::aws:policy/AmazonEFSCSIDriverPolicy"
-      ]
+      cluster_identity_oidc_issuer     = module.eks.cluster_oidc_issuer_url
+      cluster_identity_oidc_issuer_arn = module.eks.oidc_provider_arn
+      cluster_name                     = module.eks.cluster_name
+
+
       version = "latest"
+      settings = {
+        controller = {
+          fsGroupPolicy = "ReadWriteMany"
+        }
+      }
     }
   }
 
@@ -58,6 +55,11 @@ module "eks" {
       additional_tags = {
         "Name" = "${var.cluster_name}-node-group"
       }
+
+      iam_role_additional_policies = {
+        AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+        AmazonEFSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+      }
     }
   }
 
@@ -66,11 +68,43 @@ module "eks" {
   }
 }
 
-# Grab cluster data so we can configure the Kubernetes provider
-data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_name
+data "aws_iam_policy_document" "aws_efs_csi_controller_role_trust_policy" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [module.eks.oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:efs-csi-*"]
+    }
+  }
 }
 
-data "aws_eks_cluster_auth" "cluster" {
-  name = module.eks.cluster_name
+
+resource "aws_iam_role" "aws_efs_csi_controller_role" {
+  name               = "aws-efs-csi-controller-role"
+  assume_role_policy = data.aws_iam_policy_document.aws_efs_csi_controller_role_trust_policy.json
 }
+
+resource "aws_iam_role_policy_attachment" "efs_csi_role_policy_attachment" {
+  role       = aws_iam_role.aws_efs_csi_controller_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "efs_csi_node_role_policy_attachment" {
+  role       = aws_iam_role.aws_efs_csi_controller_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+

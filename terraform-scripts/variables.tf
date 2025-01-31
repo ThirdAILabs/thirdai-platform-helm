@@ -6,7 +6,7 @@ variable "aws_region" {
 
 variable "cluster_name" {
   type    = string
-  default = "thirdai"
+  default = "pratik-eks"
   description = "Name of the EKS cluster"
 }
 

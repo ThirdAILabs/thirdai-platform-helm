@@ -1,7 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: thirdai-platform-proxy
+  name: thirdai-platform-proxy  # typical Helm pattern
+  annotations:
+    kubernetes.io/ingress.class: nginx
 spec:
   rules:
     - host: {{ .Values.ingress.hostname }}

@@ -17,7 +17,7 @@ service:
 ingress:
   enabled: true
   className: "nginx"
-  hostname: "example.com"
+  hostname: "ae5d3eb02294244d9a82f06eb1e3bdce-2112299573.us-west-1.elb.amazonaws.com"
   path: "/api"
   tls: false
 
@@ -54,4 +54,4 @@ env:
   IDENTITY_PROVIDER: "my-idp"
   KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
   USE_SSL_IN_LOGIN: "true"
-  DATABASE_URI: "postgresql://postgres:demo_machine@database-1.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/postgres"
+  DATABASE_URI: "postgresql://postgres:demo_machine@database-2.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/postgres"

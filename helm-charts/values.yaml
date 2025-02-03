@@ -38,6 +38,15 @@ resources:
 # License file secret reference
 licenseSecretName: "thirdai-platform-license"
 
+keycloak:
+  image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
+  hostname: "my-keycloak.example.com"
+  db: "postgres"
+  dbUrl: "jdbc:postgresql://database-2.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/postgres"
+  dbUsername: "postgres"
+  dbPassword: "demo_machine"
+  serviceType: ClusterIP
+
 # Example environment variables
 env:
   PUBLIC_MODEL_BAZAAR_ENDPOINT: "http://thirdaiplatform.com/"

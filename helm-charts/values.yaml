@@ -25,7 +25,7 @@ ingress:
 efs:
   storageClassName: efs-sc
   size: "5Gi"
-  fileSystemId: fs-12345678
+  fileSystemId: fs-0ebb0682a83d9b30f
 
 modelbazaar_resources:
   requests:

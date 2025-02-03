@@ -19,7 +19,8 @@ ingress:
   className: "nginx"
   hostname: "ae5d3eb02294244d9a82f06eb1e3bdce-2112299573.us-west-1.elb.amazonaws.com"
   path: "/api"
-  tls: false
+  tlsSecret: thirdai-platform-tls
+  use_tls: true
 
 # EFS CSI Persistent Volume Claim settings
 efs:

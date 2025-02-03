@@ -15,7 +15,6 @@ service:
 
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
-  enabled: true
   className: "nginx"
   hostname: "ae5d3eb02294244d9a82f06eb1e3bdce-2112299573.us-west-1.elb.amazonaws.com"
   path: "/api"
@@ -24,10 +23,11 @@ ingress:
 
 # EFS CSI Persistent Volume Claim settings
 efs:
-  storageClassName: "efs-sc"
-  size: 1Gi
+  storageClassName: efs-sc
+  size: "5Gi"
+  fileSystemId: fs-12345678
 
-resources:
+modelbazaar_resources:
   requests:
     cpu: "500m"
     memory: "512Mi"
@@ -40,7 +40,6 @@ licenseSecretName: "thirdai-platform-license"
 
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
-  hostname: "my-keycloak.example.com"
   db: "postgres"
   dbUrl: "jdbc:postgresql://database-2.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/postgres"
   dbUsername: "postgres"

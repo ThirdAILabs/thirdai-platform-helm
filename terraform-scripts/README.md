@@ -32,6 +32,25 @@ After Terraform has finished setting up the VPC and subnets, you need to create 
 6. Click **Create File System**.
 7. Once created, note down the **File System ID** (`fs-xxxxxxxxx`).
 
+
+
+### Steps to Create RDS:
+1. **Go to the AWS Management Console** and open the [Amazon RDS service](https://console.aws.amazon.com/rds/).
+2. Click **Create database**.
+3. Choose **Standard Create** and select the database engine (e.g., **PostgreSQL**, **MySQL**, or **Aurora**).
+4. Under **Templates**, choose the appropriate option (e.g., **Free Tier**, **Production**, or **Dev/Test**).
+5. Configure **Settings**:
+   - Set **DB instance identifier** to `${var.cluster_name}-rds`.
+   - Define a master username and password or use AWS Secrets Manager for credentials.
+6. Under **Connectivity**:
+   - Select the **VPC** created by Terraform (`${var.cluster_name}-vpc`).
+   - In **Subnet group**, select the private subnets (`10.0.1.0/24` and `10.0.2.0/24`).
+   - Choose the **security group** created by Terraform (`efs-sg`).
+   - Ensure **Public access** is set to **No**.
+7. Under **Additional configuration**, enable **Storage Auto Scaling** if needed.
+8. Click **Create database**.
+9. Once the RDS instance is available, note down the **Endpoint** (`<db-identifier>.<region>.rds.amazonaws.com`) for application use.
+
 ---
 
 ## 3. Update `storageclass.yml` with EFS File System ID

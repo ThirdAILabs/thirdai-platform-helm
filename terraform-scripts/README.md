@@ -55,23 +55,7 @@ After Terraform has finished setting up the VPC and subnets, you need to create 
 
 ## 3. Update `storageclass.yml` with EFS File System ID
 
-Before deploying your application, update the `storageclass.yml` file with the newly created EFS **File System ID**:
-
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: efs-sc
-  namespace: kube-system
-provisioner: efs.csi.aws.com
-parameters:
-  provisioningMode: efs-ap
-  fileSystemId: fs-xxxxxxxxx  # Replace with your EFS ID
-  directoryPerms: "700"
-  basePath: "/thirdai_platform/dynamic_provisioning"
-reclaimPolicy: Retain
-volumeBindingMode: WaitForFirstConsumer
-```
+Before deploying your application, update the `values.yml` file with the newly created EFS **File System ID**: fileSystemId as efs.fileSystemId
 
 ---
 
@@ -122,5 +106,5 @@ Once the cluster and storage are configured, deploy your Helm chart:
    helm install thirdaiplatform /path/to/chart -n kube-system
    ```
 
-Your EKS cluster is now fully set up with EFS storage, and your application should be ready to deploy. 🚀
+Your EKS cluster is now fully set up with EFS storage, and your application should be ready to deploy.
 

@@ -177,4 +177,4 @@ data/
 .DS_Store
 
 .terraform*
-terraform.*
+terraform.tfstate*

@@ -59,7 +59,6 @@ spec:
             value: "{{ .Values.keycloak.dbUsername }}"
           - name: KC_DB_PASSWORD
             value: "{{ .Values.keycloak.dbPassword }}"
-          # Bootstrap admin credentials (adjust as needed)
           - name: KC_BOOTSTRAP_ADMIN_USERNAME
             value: "temp_admin"
           - name: KC_BOOTSTRAP_ADMIN_PASSWORD

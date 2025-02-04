@@ -1,6 +1,6 @@
 # ThirdAI Platform Helm Deployment Guide
 
-## Steps to create an EKS cluster:
+## Steps to create an EKS cluster skip this if using Terraform Scripts:
 1. Create a custom configuration EKS cluster (not auto). This is done with the assumption that a non-auto cluster is more similar to other cloud provider Kubernetes services.
 2. Add the EBS and EFS CSI driver add-ons, in addition to the preselected add-ons.
 3. Create IAM roles for the following service accounts:

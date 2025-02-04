@@ -4,6 +4,9 @@ metadata:
   name: thirdai-platform-proxy
   annotations:
     kubernetes.io/ingress.class: nginx
+    {{- if .Values.ingress.use_tls }}
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    {{- end }}
 spec:
   {{- if .Values.ingress.use_tls }}
   tls:
@@ -22,3 +25,19 @@ spec:
                 name: modelbazaar
                 port:
                   number: {{ .Values.service.port }}
+          {{- if .Values.ingress.use_tls }}
+          - path: /keycloak
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8180
+          - path: /keycloak/health
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 9000
+          {{- end }}

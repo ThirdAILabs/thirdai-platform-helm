@@ -201,6 +201,7 @@ resource "aws_efs_backup_policy" "thirdai_platform_efs_backup" {
   }
 }
 
+# TODO(pratik): Use different DB for each of the uri
 resource "local_file" "deployment_config" {
   filename = "${path.module}/deployment_config.txt"
   content  = <<EOF
@@ -209,7 +210,7 @@ rds_endpoint="${local.rds_endpoint}"
 rds_username="${local.rds_username}"
 rds_password="${local.rds_password}"
 modelbazaar_db_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar"
-keycloak_db_uri="postgresql://${local.rds_endpoint}/keycloak"
-grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/grafana?sslmode=require"
+keycloak_db_uri="postgresql://${local.rds_endpoint}/modelbazaar"
+grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar?sslmode=require"
 EOF
 }

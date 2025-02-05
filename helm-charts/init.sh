@@ -99,13 +99,9 @@ if $TLS_ENABLED; then
     export INGRESS_HOSTNAME="${ingress_dns}"
   fi
 
-  # Check if the TLS secret already exists.
-  if kubectl get secret thirdai-platform-tls -n kube-system >/dev/null 2>&1; then
-    echo "TLS secret thirdai-platform-tls already exists. Skipping certificate creation."
-
 
     # Create a SAN configuration file.
-    cat > san.conf <<EOF
+  cat > san.conf <<EOF
 [ req ]
 default_bits       = 2048
 prompt             = no
@@ -124,19 +120,21 @@ DNS.1   = ${INGRESS_HOSTNAME}
 EOF
 
     # Generate the TLS certificate and key.
-    openssl req -x509 -nodes -days 365 \
-      -newkey rsa:2048 \
-      -keyout tls.key \
-      -out tls.crt \
-      -config san.conf \
-      -extensions req_ext
+  openssl req -x509 -nodes -days 365 \
+    -newkey rsa:2048 \
+    -keyout tls.key \
+    -out tls.crt \
+    -config san.conf \
+    -extensions req_ext
 
     # Create (or update) the Kubernetes TLS secret.
-    kubectl create secret tls thirdai-platform-tls \
-      --cert=tls.crt \
-      --key=tls.key \
-      -n kube-system --dry-run=client -o yaml | kubectl apply -f -
-  fi
+  kubectl create secret tls thirdai-platform-tls \
+    --cert=tls.crt \
+    --key=tls.key \
+    -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+
+
+  rm -rf san.conf
 fi
 
 #####################################

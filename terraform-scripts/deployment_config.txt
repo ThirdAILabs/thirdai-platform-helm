@@ -3,5 +3,5 @@ rds_endpoint="thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:54
 rds_username="myadmin"
 rds_password="mypassword"
 modelbazaar_db_uri="postgresql://myadmin:mypassword@thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/modelbazaar"
-keycloak_db_uri="postgresql://thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/keycloak"
-grafana_db_uri="postgres://myadmin:mypassword@thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/grafana?sslmode=require"
+keycloak_db_uri="postgresql://thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/modelbazaar"
+grafana_db_uri="postgres://myadmin:mypassword@thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/modelbazaar?sslmode=require"

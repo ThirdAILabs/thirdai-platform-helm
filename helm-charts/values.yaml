@@ -42,7 +42,7 @@ licenseSecretName: "thirdai-platform-license"
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
   db: "postgres"
-  dbUrl: "jdbc:postgresql://thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/keycloak"
+  dbUrl: "jdbc:postgresql://thirdai-eks-rds-8da2bp.c3woa2m66ufq.us-west-1.rds.amazonaws.com:5432/modelbazaar"
   dbUsername: "myadmin"
   dbPassword: "mypassword"
   serviceType: ClusterIP

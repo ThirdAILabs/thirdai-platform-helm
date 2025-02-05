@@ -65,25 +65,5 @@ kubectl config use-context <your-eks-context>
 
 ---
 
-## 4. Deploy Your Helm Chart
-
-Once the cluster and storage are configured, deploy your Helm chart:
-
-1. **Create a Docker registry secret**:
-
-   ```bash
-   kubectl create secret docker-registry docker-credentials-secret \
-     --docker-server=thirdaiplatform.azurecr.io \
-     --docker-username=thirdaiplatform-pull-release-test-main \
-     --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj' \
-     -n kube-system
-   ```
-
-2. **Install the Helm chart**:
-
-   ```bash
-   helm install thirdaiplatform /path/to/chart -n kube-system
-   ```
-
 Your EKS cluster is now fully set up with EFS storage, and your application should be ready to deploy.
 

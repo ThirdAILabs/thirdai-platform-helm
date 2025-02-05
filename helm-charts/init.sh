@@ -23,6 +23,12 @@ TLS_ENABLED=false
 DEPLOYMENT_CONFIG="../terraform-scripts/deployment_config.txt"
 TEMPLATE_FILE="values.template.yaml"
 
+kubectl create secret docker-registry docker-credentials-secret \
+  --docker-server=thirdaiplatform.azurecr.io \
+  --docker-username=thirdaiplatform-pull-release-test-main \
+  --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj' \
+  -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tls)

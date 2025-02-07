@@ -20,7 +20,6 @@ ingress:
   hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
   path: "/api"
   tlsSecret: thirdai-platform-tls
-  use_tls: ${USE_TLS} # "true" or "false"
 
 # EFS CSI Persistent Volume Claim settings
 efs:

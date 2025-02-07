@@ -4,16 +4,12 @@ metadata:
   name: thirdai-platform-proxy
   annotations:
     kubernetes.io/ingress.class: nginx
-    {{- if .Values.ingress.use_tls }}
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    {{- end }}
 spec:
-  {{- if .Values.ingress.use_tls }}
   tls:
     - hosts:
         - {{ .Values.ingress.hostname }}
       secretName: {{ .Values.ingress.tlsSecret }}
-  {{- end }}
   rules:
     - host: {{ .Values.ingress.hostname }}
       http:
@@ -25,7 +21,6 @@ spec:
                 name: modelbazaar
                 port:
                   number: {{ .Values.service.port }}
-          {{- if .Values.ingress.use_tls }}
           - path: /keycloak
             pathType: Prefix
             backend:
@@ -40,4 +35,3 @@ spec:
                 name: keycloak
                 port:
                   number: 9000
-          {{- end }}

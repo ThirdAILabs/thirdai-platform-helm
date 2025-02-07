@@ -3,7 +3,7 @@
 ## Overview
 This guide explains how to deploy the **ThirdAI Platform** using Helm. The deployment process is mostly automated through a **Bash script (`init.sh`)**, which handles:
 - Installing and configuring the **NGINX Ingress Controller**
-- Setting up **TLS certificates** (if enabled)
+- Setting up **TLS certificates** 
 - Creating necessary **Kubernetes secrets**
 - Deploying the **Helm chart**
 
@@ -17,19 +17,15 @@ Ensure you have the following installed:
 - `OpenSSL` (for generating self-signed TLS certificates, if needed)
 
 ### **Installation Steps**
-   - **Without TLS (default setup):**
-     ```sh
+   ```sh
      ./init.sh
-     ```
-   - **With TLS enabled:**
-     ```sh
-     ./init.sh --tls
-     ```
+  ```
+
 
 ### **What `init.sh` Does**
 - **Creates necessary Kubernetes secrets** (including Docker credentials)
 - **Auto-detects the NGINX Ingress hostname** (if applicable)
-- **Generates self-signed TLS certificates** (if `--tls` is enabled)
+- **Generates self-signed TLS certificates** 
 - **Deploys the NGINX Ingress Controller**
 - **Generates `values.yaml` dynamically using environment variables**
 - **Deploys the Helm chart using `helm install`**

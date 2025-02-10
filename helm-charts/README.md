@@ -1,15 +1,56 @@
-Steps to create an EKS cluster:
-1. Create custom configuration EKS cluster (not auto). This is done with the assumption that a non-auto cluster is more similar to other cloud provider Kubernetes services
-2. Add the EBS and EFS CSI driver add-ons, in addition to the preselected add-ons
-3. Create IAM roles for the following service accounts:
-    1. Amazon VPC CNI
-        1. AmazonEKS_CNI_Policy
-    2. EBS CSI Driver
-        1. AmazonEBSCSIDriverPolicy
-    3. EFS CSI Driver
-        1. AmazonEFSCSIDriverPolicy
-4. Create node group with recommended IAM policy
-5. Run `aws eks update-kubeconfig --region <region-code> --name <my-cluster>` locally to populate your kubeconfig file with your eks cluster metadata
-6. Run `kubectl config use-context <context-name>` with your Kubernetes cluster context. You can run `kubectl config view` to see your contexts
-7. Run `kubectl create secret docker-registry docker-credentials-secret --docker-server=thirdaiplatform.azurecr.io --docker-username=thirdaiplatform-pull-release-test-main --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj'` to add the docker credential secret to your runtime (this docker credential doesn't need to be a secret, but for now this is how we can add secrets in the CLI)
-8. Run `helm install thirdaiplatform .` in this repo's head directory to launch modelbazaar
+# ThirdAI Platform Helm Deployment Guide
+
+## Overview
+This guide explains how to deploy the **ThirdAI Platform** using Helm. The deployment process is mostly automated through a **Bash script (`init.sh`)**, which handles:
+- Installing and configuring the **NGINX Ingress Controller**
+- Setting up **TLS certificates** 
+- Creating necessary **Kubernetes secrets**
+- Deploying the **Helm chart**
+
+## Running the Deployment Script
+To simplify the installation, you can use the provided `init.sh` script, which will handle all setup tasks automatically.
+
+### **Prerequisites**
+Ensure you have the following installed:
+- `kubectl` (configured to interact with your Kubernetes cluster)
+- `Helm` (package manager for Kubernetes)
+- `OpenSSL` (for generating self-signed TLS certificates, if needed)
+
+### **Installation Steps**
+   ```sh
+     ./init.sh
+  ```
+
+
+### **What `init.sh` Does**
+- **Creates necessary Kubernetes secrets** (including Docker credentials)
+- **Auto-detects the NGINX Ingress hostname** (if applicable)
+- **Generates self-signed TLS certificates** 
+- **Deploys the NGINX Ingress Controller**
+- **Generates `values.yaml` dynamically using environment variables**
+- **Deploys the Helm chart using `helm install`**
+
+## Verifying Deployment
+Once the script completes, verify that the services are running:
+```sh
+kubectl get pods -n kube-system
+kubectl get ingress -n kube-system
+```
+confirm HTTPS is working:
+```sh
+curl -k https://<LoadBalancer-IP-or-Hostname>/api/health
+```
+
+## Customizing Deployment
+If needed, you can modify the deployment configuration in:
+- `values.template.yaml` (used as a base for `values.yaml`)
+- `init.sh` (adjust script logic for custom workflows)
+
+## Uninstalling the Deployment
+To remove the deployed platform, run:
+```sh
+helm uninstall thirdai-platform -n kube-system
+```
+This will remove all resources associated with the platform.
+
+---

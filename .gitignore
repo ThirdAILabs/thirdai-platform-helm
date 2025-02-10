@@ -178,3 +178,9 @@ data/
 
 .terraform*
 terraform.tfstate*
+
+*.key
+*.crt
+*.txt
+
+values.yaml

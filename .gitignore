@@ -175,3 +175,12 @@ data/
 .share/
 
 .DS_Store
+
+.terraform*
+terraform.tfstate*
+
+*.key
+*.crt
+*.txt
+
+values.yaml

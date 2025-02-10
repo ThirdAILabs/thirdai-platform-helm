@@ -1,3 +1,4 @@
+# helm-charts/values.template.yaml
 replicaCount: 1
 
 # Docker image settings
@@ -6,7 +7,7 @@ image:
   tag: "v1.1.6"
   pullPolicy: IfNotPresent
 
-# The name of the Docker credentials secret that you created with kubectl create secret ...
+# Docker credentials secret
 dockerCredentialsSecret: "docker-credentials-secret"
 
 service:
@@ -15,18 +16,18 @@ service:
 
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
-  enabled: true
-  className: "nginx"    
-  hostname: "example.com"
+  className: "nginx"
+  hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
   path: "/api"
-  tls: false
+  tlsSecret: thirdai-platform-tls
 
 # EFS CSI Persistent Volume Claim settings
 efs:
-  storageClassName: "efs-sc"
-  size: 1Gi
+  storageClassName: efs-sc
+  size: "5Gi"
+  fileSystemId: "${EFS_FILE_SYSTEM_ID}"
 
-resources:
+modelbazaar_resources:
   requests:
     cpu: "500m"
     memory: "512Mi"
@@ -37,11 +38,19 @@ resources:
 # License file secret reference
 licenseSecretName: "thirdai-platform-license"
 
+keycloak:
+  image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
+  db: "postgres"
+  dbUrl: "jdbc:${KEYCLOAK_DB_URL}"
+  dbUsername: "${KEYCLOAK_DB_USERNAME}"
+  dbPassword: "${KEYCLOAK_DB_PASSWORD}"
+  serviceType: ClusterIP
+
 # Example environment variables
 env:
-  PUBLIC_MODEL_BAZAAR_ENDPOINT: "http://thirdaiplatform.com/"
+  PUBLIC_MODEL_BAZAAR_ENDPOINT: "http://example.com/"
   LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"
-  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://thirdaiplatform.com/"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://example.com/"
   NOMAD_ENDPOINT: "http://172.17.0.1:4646/"
   SHARE_DIR: "/model_bazaar"
   JWT_SECRET: "my-jwt-secret"
@@ -51,7 +60,7 @@ env:
   AUTOSCALING_ENABLED: "false"
   AUTOSCALER_MAX_COUNT: "10"
   GENAI_KEY: ""
-  IDENTITY_PROVIDER: "my-idp"
+  IDENTITY_PROVIDER: "postgres"
   KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
   USE_SSL_IN_LOGIN: "true"
-  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"
+  DATABASE_URI: "${MODELBAZAAR_DB_URI}"

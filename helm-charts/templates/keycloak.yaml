@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.dockerCredentialsSecret }}
+      containers:
+      - name: keycloak
+        image: "{{ .Values.keycloak.image }}"
+        imagePullPolicy: IfNotPresent
+        args: ["start", "--http-port=8180", "--debug"]
+        ports:
+          - name: http
+            containerPort: 8180
+          - name: health
+            containerPort: 9000
+          - name: jgroups
+            containerPort: 7800
+        env:
+          - name: KC_HTTP_ENABLED
+            value: "true"
+          - name: KC_HTTP_RELATIVE_PATH
+            value: "/keycloak"
+          - name: KC_HOSTNAME_ADMIN
+            value: "https://{{ .Values.ingress.hostname }}/keycloak"
+          - name: KC_HOSTNAME
+            value: "https://{{ .Values.ingress.hostname }}/keycloak"
+          - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+            value: "true"
+          - name: KC_HOSTNAME_DEBUG
+            value: "true"
+          - name: KC_PROXY_HEADERS
+            value: "xforwarded"
+          # Database configuration
+          - name: KC_DB
+            value: "{{ .Values.keycloak.db }}"
+          - name: KC_DB_URL
+            value: "{{ .Values.keycloak.dbUrl }}"
+          - name: KC_DB_USERNAME
+            value: "{{ .Values.keycloak.dbUsername }}"
+          - name: KC_DB_PASSWORD
+            value: "{{ .Values.keycloak.dbPassword }}"
+          - name: KC_BOOTSTRAP_ADMIN_USERNAME
+            value: "temp_admin"
+          - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+            value: "password"
+          - name: KC_LOG_CONSOLE_LEVEL
+            value: "debug"
+          - name: KC_HEALTH_ENABLED
+            value: "true"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1024Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2048Mi"
+        readinessProbe:
+          httpGet:
+            path: /keycloak/health/ready
+            port: health
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /keycloak/health/ready
+            port: health
+          initialDelaySeconds: 60
+          periodSeconds: 20
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  type: {{ .Values.keycloak.serviceType }}
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8180
+      targetPort: http
+    - name: health
+      port: 9000
+      targetPort: health
+    - name: jgroups
+      port: 7800
+      targetPort: jgroups
+

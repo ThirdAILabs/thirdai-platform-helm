@@ -1,3 +1,4 @@
+# helm-charts/values.template.yaml
 replicaCount: 1
 
 # Docker image settings
@@ -6,7 +7,7 @@ image:
   tag: "v1.1.6"
   pullPolicy: IfNotPresent
 
-# The name of the Docker credentials secret that you created with kubectl create secret ...
+# Docker credentials secret
 dockerCredentialsSecret: "docker-credentials-secret"
 
 service:
@@ -16,16 +17,15 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
-  hostname: "example.com"
+  hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
   path: "/api"
   tlsSecret: thirdai-platform-tls
-  use_tls: true
 
 # EFS CSI Persistent Volume Claim settings
 efs:
   storageClassName: efs-sc
   size: "5Gi"
-  fileSystemId: fs-xxxxxxxxx
+  fileSystemId: "${EFS_FILE_SYSTEM_ID}"
 
 modelbazaar_resources:
   requests:
@@ -41,9 +41,9 @@ licenseSecretName: "thirdai-platform-license"
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
   db: "postgres"
-  dbUrl: "<dburl>"
-  dbUsername: "<dbUsername>"
-  dbPassword: "<dbPassword>"
+  dbUrl: "jdbc:${KEYCLOAK_DB_URL}"
+  dbUsername: "${KEYCLOAK_DB_USERNAME}"
+  dbPassword: "${KEYCLOAK_DB_PASSWORD}"
   serviceType: ClusterIP
 
 # Example environment variables
@@ -63,4 +63,4 @@ env:
   IDENTITY_PROVIDER: "postgres"
   KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
   USE_SSL_IN_LOGIN: "true"
-  DATABASE_URI: "DATABASE_URI"
+  DATABASE_URI: "${MODELBAZAAR_DB_URI}"

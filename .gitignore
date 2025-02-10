@@ -177,4 +177,10 @@ data/
 .DS_Store
 
 .terraform*
-terraform.*
+terraform.tfstate*
+
+*.key
+*.crt
+*.txt
+
+values.yaml

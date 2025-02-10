@@ -14,5 +14,7 @@ aws configure
 
 You should have the necessary AWS credentials (Access Key ID, Secret Access Key, and default region) configured in `~/.aws/config` or `~/.aws/credentials`.
 
+Additionally, the initial VPC passed to the Terraform scripts must have **NAT enabled** to ensure proper network connectivity for private subnets and external resources.
+
 ---
 

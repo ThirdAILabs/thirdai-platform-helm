@@ -89,13 +89,13 @@ echo "Updating Helm repositories..."
 helm repo update
 
 echo "Deploying the NGINX Ingress Controller..."
-helm install thirdai-nginx nginx-stable/nginx-ingress -n kube-system --wait 2>/dev/null || true
+helm install thirdai nginx-stable/nginx-ingress -n kube-system --wait 2>/dev/null || true
 
 
 #####################################
 # TLS CERTIFICATE SETUP (always)
 #####################################
-DETECTED_HOSTNAME=$(kubectl get svc thirdai-nginx-nginx-ingress-controller -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+DETECTED_HOSTNAME=$(kubectl get svc thirdai-nginx-ingress-controller -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
 if [[ -n "${DETECTED_HOSTNAME}" ]]; then
   echo "Detected Ingress hostname: ${DETECTED_HOSTNAME}"
   export INGRESS_HOSTNAME="${DETECTED_HOSTNAME}"

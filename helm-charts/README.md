@@ -36,7 +36,7 @@ Once the script completes, verify that the services are running:
 kubectl get pods -n kube-system
 kubectl get ingress -n kube-system
 ```
-If TLS is enabled, confirm HTTPS is working:
+confirm HTTPS is working:
 ```sh
 curl -k https://<LoadBalancer-IP-or-Hostname>/api/health
 ```

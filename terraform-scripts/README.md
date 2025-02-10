@@ -2,6 +2,8 @@
 
 ## 1. Initialize and Apply Terraform Configuration
 
+Before deploying the infrastructure, ensure that you have filled out the required Terraform variables (terraform.tfvars) correctly.
+
 Run the following commands to create the necessary AWS infrastructure:
 
 ```bash
@@ -10,7 +12,6 @@ terraform apply
 ```
 
 ### This will create:
-- A new VPC with subnets, route tables, and a NAT gateway.
 - An EKS cluster with the specified Kubernetes version (e.g., 1.31).
 - The EBS and EFS CSI driver add-ons.
 - Required IAM roles and policies for those add-ons.

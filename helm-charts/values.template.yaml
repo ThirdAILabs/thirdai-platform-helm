@@ -12,7 +12,7 @@ dockerCredentialsSecret: "docker-credentials-secret"
 
 service:
   port: 80
-  type: ClusterIP
+  type: NodePort
 
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:

@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.13"
+  tag: "v0.0.17"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -17,15 +17,15 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
-  hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
-  path: "/api"
+  hostname: "abfa64f3f5c1f48339e88f17bedf71ce-1330185120.us-east-1.elb.amazonaws.com" # Will be set automatically (or prompted) when TLS is enabled.
+  path: "/api/v2"
   tlsSecret: thirdai-platform-tls
 
 # EFS CSI Persistent Volume Claim settings
 efs:
   storageClassName: efs-sc
-  size: "5Gi"
-  fileSystemId: "${EFS_FILE_SYSTEM_ID}"
+  size: "1Gi"
+  fileSystemId: "fs-0d3e07d89ce7898e5"
 
 modelbazaar_resources:
   requests:
@@ -41,9 +41,9 @@ licenseSecretName: "thirdai-platform-license"
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
   db: "postgres"
-  dbUrl: "jdbc:${KEYCLOAK_DB_URL}"
-  dbUsername: "${KEYCLOAK_DB_USERNAME}"
-  dbPassword: "${KEYCLOAK_DB_PASSWORD}"
+  dbUrl: "jdbc:test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"
+  dbUsername: "postgres"
+  dbPassword: "4"
   serviceType: ClusterIP
 
 # Example environment variables

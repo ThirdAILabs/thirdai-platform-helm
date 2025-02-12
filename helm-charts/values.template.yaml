@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "latest"
+  tag: "v0.0.20"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -64,3 +64,4 @@ env:
   KUBERNETES_ENDPOINT: "https://kubernetes.default.svc"
   GRAFANA_DB_URL: "${GRAFANA_DB_URL}"
   LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://modelbazaar:80"

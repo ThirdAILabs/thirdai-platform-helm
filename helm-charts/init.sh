@@ -6,11 +6,12 @@ set -euo pipefail
 #####################################
 usage() {
   cat <<EOF
-Usage: $0 [--deployment-config <file>] [--template <file>]
+Usage: $0 [--deployment-config <file>] [--template <file>] [--namespace <namespace>]
 
 Options:
   --deployment-config FILE  Specify the deployment configuration file (default: ../terraform-scripts/deployment_config.txt).
   --template FILE           Specify the values template file (default: values.template.yaml).
+  --namespace NAMESPACE     Specify the namespace to deploy the application (default: thirdai).
   -h, --help                Show this help message.
 EOF
 }
@@ -20,12 +21,7 @@ EOF
 #####################################
 DEPLOYMENT_CONFIG="../terraform-scripts/deployment_config.txt"
 TEMPLATE_FILE="values.template.yaml"
-
-kubectl create secret docker-registry docker-credentials-secret \
-  --docker-server=thirdaiplatform.azurecr.io \
-  --docker-username=thirdaiplatform-pull-release-test-main \
-  --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj' \
-  -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+NAMESPACE="thirdai"  # Default namespace
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +31,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --template)
       TEMPLATE_FILE="$2"
+      shift 2
+      ;;
+    --namespace)
+      NAMESPACE="$2"
       shift 2
       ;;
     -h|--help)
@@ -48,6 +48,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+#####################################
+# ENSURE NAMESPACE EXISTS           #
+#####################################
+echo "Ensuring namespace '$NAMESPACE' exists..."
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
 # VERIFY REQUIRED FILES             #
@@ -75,9 +81,18 @@ export KEYCLOAK_DB_URL="$keycloak_db_uri"
 export KEYCLOAK_DB_USERNAME="$rds_username"
 export KEYCLOAK_DB_PASSWORD="$rds_password"
 export MODELBAZAAR_DB_URI="$modelbazaar_db_uri"
+export GRAFANA_DB_URL="$grafana_db_uri"
 
 export INGRESS_HOSTNAME="example.com"
 
+#####################################
+# CREATE DOCKER SECRET              #
+#####################################
+kubectl create secret docker-registry docker-credentials-secret \
+  --docker-server=thirdaiplatform.azurecr.io \
+  --docker-username=thirdaiplatform-pull-eks-test \
+  --docker-password='+0j2ErguQ9dK+eELV7VNBWLFdDe+rF2mAXrKmGfhy9+ACRBHAhHg' \
+  -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
 # DEPLOY NGINX INGRESS CONTROLLER   #
@@ -88,14 +103,14 @@ helm repo add nginx-stable https://helm.nginx.com/stable 2>/dev/null || true
 echo "Updating Helm repositories..."
 helm repo update
 
-echo "Deploying the NGINX Ingress Controller..."
+echo "Deploying the NGINX Ingress Controller in 'kube-system'..."
 helm install thirdai nginx-stable/nginx-ingress -n kube-system --wait 2>/dev/null || true
 
-
 #####################################
-# TLS CERTIFICATE SETUP (always)
+# TLS CERTIFICATE SETUP             #
 #####################################
 DETECTED_HOSTNAME=$(kubectl get svc thirdai-nginx-ingress-controller -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+
 if [[ -n "${DETECTED_HOSTNAME}" ]]; then
   echo "Detected Ingress hostname: ${DETECTED_HOSTNAME}"
   export INGRESS_HOSTNAME="${DETECTED_HOSTNAME}"
@@ -132,30 +147,29 @@ openssl req -x509 -nodes -days 365 \
 kubectl create secret tls thirdai-platform-tls \
   --cert=tls.crt \
   --key=tls.key \
-  -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+  -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 rm -rf san.conf
 
 #####################################
-# GENERATE FINAL values.yaml         #
+# GENERATE FINAL values.yaml        #
 #####################################
 FINAL_VALUES="values.yaml"
 envsubst < "$TEMPLATE_FILE" > "$FINAL_VALUES"
 echo "Generated $FINAL_VALUES using envsubst."
 
-
 #####################################
 # DEPLOY THE HELM CHART             #
 #####################################
-echo "Removing any previous Helm release (if exists)..."
-helm uninstall thirdai-platform -n kube-system 2>/dev/null || true
+echo "Removing any previous Helm release in '$NAMESPACE' (if exists)..."
+helm uninstall thirdai-platform -n "$NAMESPACE" 2>/dev/null || true
 
 echo "Installing the Helm chart from . using the generated values file..."
-helm install thirdai-platform . -n kube-system --values "$FINAL_VALUES"
+helm install thirdai-platform . -n "$NAMESPACE" --values "$FINAL_VALUES"
 
 #####################################
 # FINAL STATUS MESSAGE              #
 #####################################
 echo "Deployment complete!"
 echo "Verify your Ingress with:"
-echo "  kubectl get ingress -n kube-system"
+echo "  kubectl get ingress -n $NAMESPACE"

@@ -35,3 +35,17 @@ spec:
                 name: keycloak
                 port:
                   number: 9000
+          - path: /cache
+            pathType: Prefix
+            backend:
+              service:
+                name: llm-cache
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: thirdai-platform-frontend
+                port:
+                  number: 3000

@@ -1,14 +1,14 @@
 # General cluster configuration
-aws_region           = "us-east-1"
-cluster_name         = "thirdai-eks"
+aws_region           = "us-west-1"
+cluster_name         = "pratik-eks"
 cluster_version      = "1.31"
-vpc_id               = "vpc-xxx"                    # Replace with your VPC ID
-private_subnets      = ["subnet-xxx", "subnet-xxx"] # Replace with your private subnet IDs
-private_subnets_cidr = ["xxxx", "xxxx"]             # CIDRs for the private subnets
+vpc_id               = "vpc-0da33d20daf0991c9"                                  # Replace with your VPC ID
+private_subnets      = ["subnet-03a728dd68184cbf0", "subnet-0454326c7fb260a21"] # Replace with your private subnet IDs
+private_subnets_cidr = ["10.0.128.0/20", "10.0.144.0/20"]                       # CIDRs for the private subnets
 
-node_group_desired_capacity = 1
+node_group_desired_capacity = 3
 node_group_max_capacity     = 4
-node_group_min_capacity     = 1
+node_group_min_capacity     = 3
 node_group_instance_types   = ["t3.medium"]
 
 # RDS Configuration

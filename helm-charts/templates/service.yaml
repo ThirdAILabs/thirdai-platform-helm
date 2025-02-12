@@ -3,7 +3,6 @@ kind: Service
 metadata:
   name: modelbazaar
 spec:
-  type: {{ .Values.service.type }}
   selector:
     app: modelbazaar
   ports:

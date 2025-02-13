@@ -198,18 +198,24 @@ if [[ -n "$DASHBOARD_TOKEN_SECRET" ]]; then
   echo "Using existing Kubernetes Dashboard admin token."
 else
   echo "Creating new Kubernetes Dashboard admin token..."
-  kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard
-  kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin
+  kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard --dry-run=client -o yaml | kubectl apply -f -
+  kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin --dry-run=client -o yaml | kubectl apply -f -
+
+  # Fetch the token after creation
+  sleep 5  # Allow time for the token to be generated
   ADMIN_TOKEN=$(kubectl -n kubernetes-dashboard create token dashboard-admin)
 fi
 
-#####################################
-# PORT-FORWARD KUBERNETES DASHBOARD #
-#####################################
-echo "Starting port-forwarding for Kubernetes Dashboard..."
-kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 &
-
+# Print the token before starting port-forwarding
 echo "Access the Kubernetes Dashboard at: https://localhost:8443"
 echo "Use the following token to log in:"
 echo "$ADMIN_TOKEN"
+
+#####################################
+# PORT-FORWARD KUBERNETES DASHBOARD (FOREGROUND) #
+#####################################
+echo "Starting port-forwarding for Kubernetes Dashboard..."
+kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443
+
+
 

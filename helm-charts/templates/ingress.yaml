@@ -3,14 +3,30 @@ kind: Ingress
 metadata:
   name: thirdai-platform-proxy
   annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.org/mergeable-ingress-type: "master"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "*"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "*"
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - {{ .Values.ingress.hostname }}
       secretName: {{ .Values.ingress.tlsSecret }}
+  rules:
+    - host: {{ .Values.ingress.hostname }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: modelbazaar
+  annotations:
+    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
   rules:
     - host: {{ .Values.ingress.hostname }}
       http:
@@ -22,6 +38,21 @@ spec:
                 name: modelbazaar
                 port:
                   number: {{ .Values.service.port }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak
+  annotations:
+    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.hostname }}
+      http:
+        paths:
           - path: /keycloak
             pathType: Prefix
             backend:
@@ -36,17 +67,78 @@ spec:
                 name: keycloak
                 port:
                   number: 9000
-          - path: /cache
+
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: thirdai-platform-proxy-internal
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "*"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "*"
+    nginx.org/mergeable-ingress-type: "master"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: thirdai-nginx-ingress-controller.kube-system.svc.cluster.local
+
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: modelbazaar-internal
+  annotations:
+    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: thirdai-nginx-ingress-controller.kube-system.svc.cluster.local
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
             pathType: Prefix
             backend:
               service:
-                name: llm-cache
+                name: modelbazaar
                 port:
-                  number: 80
-          - path: /
+                  number: {{ .Values.service.port }}
+
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-internal
+  annotations:
+    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: thirdai-nginx-ingress-controller.kube-system.svc.cluster.local
+      http:
+        paths:
+          - path: /keycloak
             pathType: Prefix
             backend:
               service:
-                name: thirdai-platform-frontend
+                name: keycloak
                 port:
-                  number: 3000
+                  number: 8180
+          - path: /keycloak/health
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 9000

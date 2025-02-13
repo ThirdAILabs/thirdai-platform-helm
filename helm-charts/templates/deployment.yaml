@@ -14,8 +14,9 @@ spec:
     spec:
       imagePullSecrets:
         - name: {{ .Values.dockerCredentialsSecret }}
-        
+
       serviceAccountName: modelbazaar-sa
+
       initContainers:
         - name: copy-license
           image: busybox

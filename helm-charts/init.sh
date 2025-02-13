@@ -173,3 +173,43 @@ helm install thirdai-platform . -n "$NAMESPACE" --values "$FINAL_VALUES"
 echo "Deployment complete!"
 echo "Verify your Ingress with:"
 echo "  kubectl get ingress -n $NAMESPACE"
+
+
+#####################################
+# ADD KUBERNETES DASHBOARD HELM REPO & INSTALL CHART #
+#####################################
+echo "Adding the Kubernetes Dashboard Helm repository..."
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ 2>/dev/null || true
+
+echo "Updating Helm repositories..."
+helm repo update
+
+echo "Installing Kubernetes Dashboard Helm chart..."
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+#####################################
+# CHECK FOR KUBERNETES DASHBOARD ADMIN TOKEN #
+#####################################
+echo "Checking for existing Kubernetes Dashboard admin token..."
+DASHBOARD_TOKEN_SECRET=$(kubectl -n kubernetes-dashboard get secret | grep kubernetes-dashboard-token | awk '{print $1}' || true)
+
+if [[ -n "$DASHBOARD_TOKEN_SECRET" ]]; then
+  ADMIN_TOKEN=$(kubectl -n kubernetes-dashboard get secret "$DASHBOARD_TOKEN_SECRET" -o jsonpath="{.data.token}" | base64 --decode)
+  echo "Using existing Kubernetes Dashboard admin token."
+else
+  echo "Creating new Kubernetes Dashboard admin token..."
+  kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard
+  kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin
+  ADMIN_TOKEN=$(kubectl -n kubernetes-dashboard create token dashboard-admin)
+fi
+
+#####################################
+# PORT-FORWARD KUBERNETES DASHBOARD #
+#####################################
+echo "Starting port-forwarding for Kubernetes Dashboard..."
+kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 &
+
+echo "Access the Kubernetes Dashboard at: https://localhost:8443"
+echo "Use the following token to log in:"
+echo "$ADMIN_TOKEN"
+

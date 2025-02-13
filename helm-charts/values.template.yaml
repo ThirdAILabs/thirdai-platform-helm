@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.20"
+  tag: "v0.0.27"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -12,13 +12,13 @@ dockerCredentialsSecret: "docker-credentials-secret"
 
 service:
   port: 80
-  type: NodePort
+  type: ClusterIP
 
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
   hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
-  path: "/api"
+  path: "/api/v2"
   tlsSecret: thirdai-platform-tls
 
 # EFS CSI Persistent Volume Claim settings
@@ -64,4 +64,5 @@ env:
   KUBERNETES_ENDPOINT: "https://kubernetes.default.svc"
   GRAFANA_DB_URL: "${GRAFANA_DB_URL}"
   LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"
-  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://modelbazaar:80"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://thirdai-nginx-ingress-controller.kube-system.svc.cluster.local/"
+  INGRESS_HOSTNAME: "${INGRESS_HOSTNAME}"

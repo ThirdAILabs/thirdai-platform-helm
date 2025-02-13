@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.17"
+  tag: "v0.0.26"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -41,13 +41,15 @@ licenseSecretName: "thirdai-platform-license"
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
   db: "postgres"
-  dbUrl: "jdbc:test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"
+  dbUrl: "jdbc:postgresql://test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/keycloak"
   dbUsername: "postgres"
-  dbPassword: "4"
+  dbPassword: "4yChWUTjZ22x"
   serviceType: ClusterIP
 
 # Example environment variables
 env:
+  INGRESS_HOSTNAME: "abfa64f3f5c1f48339e88f17bedf71ce-1330185120.us-east-1.elb.amazonaws.com"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://modelbazaar.thirdai-platform.svc.cluster.local/"
   KUBERNETES: "true"
   SHARE_DIR: "/model_bazaar"
   JWT_SECRET: "my-jwt-secret"
@@ -55,6 +57,6 @@ env:
   ADMIN_MAIL: "admin@thirdai.com"
   ADMIN_PASSWORD: "password"
   IDENTITY_PROVIDER: "postgres"
-  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/postgres"
+  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/modelbazaar"
   GRAFANA_DB_URL: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/grafana"
   LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"

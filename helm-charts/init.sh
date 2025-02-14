@@ -98,7 +98,7 @@ kubectl create secret docker-registry docker-credentials-secret \
 # DEPLOY NGINX INGRESS CONTROLLER   #
 #####################################
 echo "Adding the NGINX stable Helm repository..."
-helm repo add nginx-stable https://helm.nginx.com/stable 2>/dev/null || true
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>/dev/null || true
 
 echo "Updating Helm repositories..."
 helm repo update

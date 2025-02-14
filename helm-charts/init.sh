@@ -6,11 +6,12 @@ set -euo pipefail
 #####################################
 usage() {
   cat <<EOF
-Usage: $0 [--deployment-config <file>] [--template <file>]
+Usage: $0 [--deployment-config <file>] [--template <file>] [--namespace <namespace>]
 
 Options:
   --deployment-config FILE  Specify the deployment configuration file (default: ../terraform-scripts/deployment_config.txt).
   --template FILE           Specify the values template file (default: values.template.yaml).
+  --namespace NAMESPACE     Specify the namespace to deploy the application (default: thirdai).
   -h, --help                Show this help message.
 EOF
 }
@@ -20,12 +21,7 @@ EOF
 #####################################
 DEPLOYMENT_CONFIG="../terraform-scripts/deployment_config.txt"
 TEMPLATE_FILE="values.template.yaml"
-
-kubectl create secret docker-registry docker-credentials-secret \
-  --docker-server=thirdaiplatform.azurecr.io \
-  --docker-username=thirdaiplatform-pull-release-test-main \
-  --docker-password='5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj' \
-  -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+NAMESPACE="thirdai"  # Default namespace
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +31,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --template)
       TEMPLATE_FILE="$2"
+      shift 2
+      ;;
+    --namespace)
+      NAMESPACE="$2"
       shift 2
       ;;
     -h|--help)
@@ -48,6 +48,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+#####################################
+# ENSURE NAMESPACE EXISTS           #
+#####################################
+echo "Ensuring namespace '$NAMESPACE' exists..."
+kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
 # VERIFY REQUIRED FILES             #
@@ -75,9 +81,18 @@ export KEYCLOAK_DB_URL="$keycloak_db_uri"
 export KEYCLOAK_DB_USERNAME="$rds_username"
 export KEYCLOAK_DB_PASSWORD="$rds_password"
 export MODELBAZAAR_DB_URI="$modelbazaar_db_uri"
+export GRAFANA_DB_URL="$grafana_db_uri"
 
 export INGRESS_HOSTNAME="example.com"
 
+#####################################
+# CREATE DOCKER SECRET              #
+#####################################
+kubectl create secret docker-registry docker-credentials-secret \
+  --docker-server=thirdaiplatform.azurecr.io \
+  --docker-username=thirdaiplatform-pull-eks-test \
+  --docker-password='+0j2ErguQ9dK+eELV7VNBWLFdDe+rF2mAXrKmGfhy9+ACRBHAhHg' \
+  -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
 # DEPLOY NGINX INGRESS CONTROLLER   #
@@ -89,13 +104,20 @@ echo "Updating Helm repositories..."
 helm repo update
 
 echo "Deploying the NGINX Ingress Controller..."
-helm install thirdai nginx-stable/nginx-ingress -n kube-system --wait 2>/dev/null || true
+helm install thirdai ingress-nginx/ingress-nginx -n $NAMESPACE --wait 2>/dev/null || true
 
+echo "Deploying the internal NGINX Ingress Controller..."
+helm install thirdai-internal ingress-nginx/ingress-nginx -n $NAMESPACE \
+  --set controller.ingressClassResource.name=nginx-internal \
+  --set controller.service.type=ClusterIP \
+  --set controller.ingressClass=nginx-internal \
+  --wait 2>/dev/null || true
 
 #####################################
-# TLS CERTIFICATE SETUP (always)
+# TLS CERTIFICATE SETUP             #
 #####################################
-DETECTED_HOSTNAME=$(kubectl get svc thirdai-nginx-ingress-controller -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+DETECTED_HOSTNAME=$(kubectl get svc thirdai-ingress-nginx-controller -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+
 if [[ -n "${DETECTED_HOSTNAME}" ]]; then
   echo "Detected Ingress hostname: ${DETECTED_HOSTNAME}"
   export INGRESS_HOSTNAME="${DETECTED_HOSTNAME}"
@@ -132,30 +154,72 @@ openssl req -x509 -nodes -days 365 \
 kubectl create secret tls thirdai-platform-tls \
   --cert=tls.crt \
   --key=tls.key \
-  -n kube-system --dry-run=client -o yaml | kubectl apply -f -
+  -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 rm -rf san.conf
 
 #####################################
-# GENERATE FINAL values.yaml         #
+# GENERATE FINAL values.yaml        #
 #####################################
 FINAL_VALUES="values.yaml"
 envsubst < "$TEMPLATE_FILE" > "$FINAL_VALUES"
 echo "Generated $FINAL_VALUES using envsubst."
 
-
 #####################################
 # DEPLOY THE HELM CHART             #
 #####################################
-echo "Removing any previous Helm release (if exists)..."
-helm uninstall thirdai-platform -n kube-system 2>/dev/null || true
+echo "Removing any previous Helm release in '$NAMESPACE' (if exists)..."
+helm uninstall thirdai-platform -n "$NAMESPACE" 2>/dev/null || true
 
 echo "Installing the Helm chart from . using the generated values file..."
-helm install thirdai-platform . -n kube-system --values "$FINAL_VALUES"
+helm install thirdai-platform . -n "$NAMESPACE" --values "$FINAL_VALUES"
 
 #####################################
 # FINAL STATUS MESSAGE              #
 #####################################
 echo "Deployment complete!"
 echo "Verify your Ingress with:"
-echo "  kubectl get ingress -n kube-system"
+echo "  kubectl get ingress -n $NAMESPACE"
+
+
+#####################################
+# ADD KUBERNETES DASHBOARD HELM REPO & INSTALL CHART #
+#####################################
+echo "Adding the Kubernetes Dashboard Helm repository..."
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ 2>/dev/null || true
+
+echo "Updating Helm repositories..."
+helm repo update
+
+echo "Installing Kubernetes Dashboard Helm chart..."
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+#####################################
+# CHECK FOR KUBERNETES DASHBOARD ADMIN TOKEN #
+#####################################
+echo "Checking for existing Kubernetes Dashboard admin token..."
+DASHBOARD_TOKEN_SECRET=$(kubectl -n kubernetes-dashboard get secret | grep kubernetes-dashboard-token | awk '{print $1}' || true)
+
+if [[ -n "$DASHBOARD_TOKEN_SECRET" ]]; then
+  ADMIN_TOKEN=$(kubectl -n kubernetes-dashboard get secret "$DASHBOARD_TOKEN_SECRET" -o jsonpath="{.data.token}" | base64 --decode)
+  echo "Using existing Kubernetes Dashboard admin token."
+else
+  echo "Creating new Kubernetes Dashboard admin token..."
+  kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard --dry-run=client -o yaml | kubectl apply -f -
+  kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin --dry-run=client -o yaml | kubectl apply -f -
+
+  # Fetch the token after creation
+  sleep 5  # Allow time for the token to be generated
+  ADMIN_TOKEN=$(kubectl -n kubernetes-dashboard create token dashboard-admin)
+fi
+
+# Print the token before starting port-forwarding
+echo "Access the Kubernetes Dashboard at: https://localhost:8443"
+echo "Use the following token to log in:"
+echo "$ADMIN_TOKEN"
+
+#####################################
+# PORT-FORWARD KUBERNETES DASHBOARD (FOREGROUND) #
+#####################################
+echo "Starting port-forwarding for Kubernetes Dashboard..."
+kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443

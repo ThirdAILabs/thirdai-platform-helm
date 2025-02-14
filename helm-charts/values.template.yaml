@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.26"
+  tag: "v0.0.42"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -17,7 +17,7 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
-  hostname: "abfa64f3f5c1f48339e88f17bedf71ce-1330185120.us-east-1.elb.amazonaws.com" # Will be set automatically (or prompted) when TLS is enabled.
+  hostname: "a816a60f3cc484868b25abf849a52f06-1296627079.us-east-1.elb.amazonaws.com" # Will be set automatically (or prompted) when TLS is enabled.
   path: "/api/v2"
   tlsSecret: thirdai-platform-tls
 
@@ -48,8 +48,8 @@ keycloak:
 
 # Example environment variables
 env:
-  INGRESS_HOSTNAME: "abfa64f3f5c1f48339e88f17bedf71ce-1330185120.us-east-1.elb.amazonaws.com"
-  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://modelbazaar.thirdai-platform.svc.cluster.local/"
+  INGRESS_HOSTNAME: "a816a60f3cc484868b25abf849a52f06-1296627079.us-east-1.elb.amazonaws.com"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://thirdai-internal-ingress-nginx-controller.thirdai-platform.svc.cluster.local/"
   KUBERNETES: "true"
   SHARE_DIR: "/model_bazaar"
   JWT_SECRET: "my-jwt-secret"

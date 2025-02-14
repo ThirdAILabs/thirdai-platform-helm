@@ -21,7 +21,7 @@ EOF
 #####################################
 DEPLOYMENT_CONFIG="../terraform-scripts/deployment_config.txt"
 TEMPLATE_FILE="values.template.yaml"
-NAMESPACE="thirdai"  # Default namespace
+NAMESPACE="thirdai-platform"  # Default namespace
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -103,13 +103,20 @@ helm repo add nginx-stable https://helm.nginx.com/stable 2>/dev/null || true
 echo "Updating Helm repositories..."
 helm repo update
 
-echo "Deploying the NGINX Ingress Controller in 'kube-system'..."
-helm install thirdai nginx-stable/nginx-ingress -n kube-system --wait 2>/dev/null || true
+echo "Deploying the NGINX Ingress Controller..."
+helm install thirdai ingress-nginx/ingress-nginx -n $NAMESPACE --wait 2>/dev/null || true
+
+echo "Deploying the internal NGINX Ingress Controller..."
+helm install thirdai-internal ingress-nginx/ingress-nginx -n $NAMESPACE \
+  --set controller.ingressClassResource.name=nginx-internal \
+  --set controller.service.type=ClusterIP \
+  --set controller.ingressClass=nginx-internal \
+  --wait 2>/dev/null || true
 
 #####################################
 # TLS CERTIFICATE SETUP             #
 #####################################
-DETECTED_HOSTNAME=$(kubectl get svc thirdai-nginx-ingress-controller -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+DETECTED_HOSTNAME=$(kubectl get svc thirdai-ingress-nginx-controller -n $NAMESPACE -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
 
 if [[ -n "${DETECTED_HOSTNAME}" ]]; then
   echo "Detected Ingress hostname: ${DETECTED_HOSTNAME}"
@@ -216,6 +223,3 @@ echo "$ADMIN_TOKEN"
 #####################################
 echo "Starting port-forwarding for Kubernetes Dashboard..."
 kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443
-
-
-

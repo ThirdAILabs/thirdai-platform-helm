@@ -27,7 +27,6 @@ resource "random_string" "unique_suffix" {
   upper   = false
   special = false
 }
-
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -89,6 +88,18 @@ module "eks" {
   tags = {
     "Project" = var.cluster_name
   }
+}
+
+# Allow the EKS worker nodes (which use module.eks.node_security_group_id)
+# to communicate with each other on all TCP ports.
+resource "aws_security_group_rule" "eks_nodes_allow_all_tcp" {
+  description              = "Allow all TCP traffic between worker nodes"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  source_security_group_id = module.eks.node_security_group_id
+  security_group_id        = module.eks.node_security_group_id
 }
 
 resource "aws_security_group" "thirdai_platform_sg" {

@@ -21,7 +21,7 @@ EOF
 #####################################
 DEPLOYMENT_CONFIG="../terraform-scripts/deployment_config.txt"
 TEMPLATE_FILE="values.template.yaml"
-NAMESPACE="thirdai"  # Default namespace
+NAMESPACE="thirdai-platform"  # Default namespace
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

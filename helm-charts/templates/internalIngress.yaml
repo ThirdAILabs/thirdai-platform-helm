@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   name: thirdai-platform-proxy-internal
   annotations:
-    nginx.org/mergeable-ingress-type: "master"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 spec:
   ingressClassName: nginx-internal
   rules:
@@ -15,7 +15,7 @@ kind: Ingress
 metadata:
   name: modelbazaar-internal
   annotations:
-    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 spec:
   ingressClassName: nginx-internal
   rules:
@@ -36,7 +36,7 @@ kind: Ingress
 metadata:
   name: keycloak-internal
   annotations:
-    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 spec:
   ingressClassName: nginx-internal
   rules:

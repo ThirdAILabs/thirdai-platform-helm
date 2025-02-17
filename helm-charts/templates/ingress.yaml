@@ -3,7 +3,8 @@ kind: Ingress
 metadata:
   name: thirdai-platform-proxy
   annotations:
-    nginx.org/mergeable-ingress-type: "master"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
 spec:
   ingressClassName: nginx
   tls:
@@ -19,7 +20,7 @@ kind: Ingress
 metadata:
   name: modelbazaar
   annotations:
-    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   ingressClassName: nginx
@@ -41,7 +42,7 @@ kind: Ingress
 metadata:
   name: keycloak
   annotations:
-    nginx.org/mergeable-ingress-type: "minion"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   ingressClassName: nginx

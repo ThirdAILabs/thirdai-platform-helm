@@ -3,8 +3,8 @@ replicaCount: 1
 
 # Docker image settings
 image:
-  repository: "thirdaiplatform.azurecr.io/thirdai_platform_release-test-main"
-  tag: "v1.1.6"
+  repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
+  tag: "v0.0.54"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret
@@ -17,15 +17,15 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
-  hostname: "${INGRESS_HOSTNAME}" # Will be set automatically (or prompted) when TLS is enabled.
-  path: "/api"
+  hostname: "${INGRESS_HOSTNAME}"
+  path: "/api/v2"
   tlsSecret: thirdai-platform-tls
 
 # EFS CSI Persistent Volume Claim settings
 efs:
   storageClassName: efs-sc
-  size: "5Gi"
-  fileSystemId: "${EFS_FILE_SYSTEM_ID}"
+  size: "1Gi"
+  fileSystemId: "fs-0d3e07d89ce7898e5"
 
 modelbazaar_resources:
   requests:
@@ -48,19 +48,15 @@ keycloak:
 
 # Example environment variables
 env:
-  PUBLIC_MODEL_BAZAAR_ENDPOINT: "http://example.com/"
-  LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"
-  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://example.com/"
-  NOMAD_ENDPOINT: "http://172.17.0.1:4646/"
+  INGRESS_HOSTNAME: "${INGRESS_HOSTNAME}"
+  PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://thirdai-internal-ingress-nginx-controller.thirdai-platform.svc.cluster.local/"
+  KUBERNETES: "true"
   SHARE_DIR: "/model_bazaar"
   JWT_SECRET: "my-jwt-secret"
   ADMIN_USERNAME: "admin"
   ADMIN_MAIL: "admin@thirdai.com"
   ADMIN_PASSWORD: "password"
-  AUTOSCALING_ENABLED: "false"
-  AUTOSCALER_MAX_COUNT: "10"
-  GENAI_KEY: ""
   IDENTITY_PROVIDER: "postgres"
-  KEYCLOAK_SERVER_URL: "https://my-keycloak.example.com"
-  USE_SSL_IN_LOGIN: "true"
   DATABASE_URI: "${MODELBAZAAR_DB_URI}"
+  GRAFANA_DB_URL: "${GRAFANA_DB_URL}"
+  LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"

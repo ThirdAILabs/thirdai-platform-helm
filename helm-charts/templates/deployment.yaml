@@ -15,11 +15,15 @@ spec:
       imagePullSecrets:
         - name: {{ .Values.dockerCredentialsSecret }}
 
+      serviceAccountName: modelbazaar-sa
+
       initContainers:
-        - name: init-create-license-dir
+        - name: copy-license
           image: busybox
-          command: ["sh", "-c", "mkdir -p /model_bazaar/license"]
+          command: ['sh', '-c', 'mkdir -p /model_bazaar/license && cp /tmp/secret/ndb_enterprise_license.json /model_bazaar/license/ndb_enterprise_license.json']
           volumeMounts:
+            - name: license-file
+              mountPath: /tmp/secret
             - name: shared-modelbazaar
               mountPath: /model_bazaar
 
@@ -37,7 +41,7 @@ spec:
           {{- end }}
         readinessProbe:
           httpGet:
-            path: /api/health
+            path: /api/v2/health
             port: http
           initialDelaySeconds: 5
           periodSeconds: 10
@@ -51,9 +55,6 @@ spec:
         volumeMounts:
           - name: shared-modelbazaar
             mountPath: /model_bazaar
-          - name: license-file
-            mountPath: /model_bazaar/license/ndb_enterprise_license.json
-            subPath: ndb_enterprise_license.json
 
       volumes:
       - name: shared-modelbazaar

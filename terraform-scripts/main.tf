@@ -91,6 +91,18 @@ module "eks" {
   }
 }
 
+# Allow the EKS worker nodes (which use module.eks.node_security_group_id)
+# to communicate with each other on all TCP ports.
+resource "aws_security_group_rule" "eks_nodes_allow_all_tcp" {
+  description              = "Allow all TCP traffic between worker nodes"
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 65535
+  protocol                 = "tcp"
+  source_security_group_id = module.eks.node_security_group_id
+  security_group_id        = module.eks.node_security_group_id
+}
+
 resource "aws_security_group" "thirdai_platform_sg" {
   name        = "thirdai-platform-sg-${random_string.unique_suffix.result}"
   description = "Security group for RDS and EFS access for ThirdAI Platform"

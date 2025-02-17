@@ -17,7 +17,7 @@ service:
 # Ingress settings (Nginx). Route /api to modelbazaar
 ingress:
   className: "nginx"
-  hostname: "a816a60f3cc484868b25abf849a52f06-1296627079.us-east-1.elb.amazonaws.com" # Will be set automatically (or prompted) when TLS is enabled.
+  hostname: "${INGRESS_HOSTNAME}"
   path: "/api/v2"
   tlsSecret: thirdai-platform-tls
 
@@ -41,14 +41,14 @@ licenseSecretName: "thirdai-platform-license"
 keycloak:
   image: "thirdaiplatform.azurecr.io/keycloak:26.0.0"
   db: "postgres"
-  dbUrl: "jdbc:postgresql://test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/keycloak"
-  dbUsername: "postgres"
-  dbPassword: "4yChWUTjZ22x"
+  dbUrl: "jdbc:${KEYCLOAK_DB_URL}"
+  dbUsername: "${KEYCLOAK_DB_USERNAME}"
+  dbPassword: "${KEYCLOAK_DB_PASSWORD}"
   serviceType: ClusterIP
 
 # Example environment variables
 env:
-  INGRESS_HOSTNAME: "a816a60f3cc484868b25abf849a52f06-1296627079.us-east-1.elb.amazonaws.com"
+  INGRESS_HOSTNAME: "${INGRESS_HOSTNAME}"
   PRIVATE_MODEL_BAZAAR_ENDPOINT: "http://thirdai-internal-ingress-nginx-controller.thirdai-platform.svc.cluster.local/"
   KUBERNETES: "true"
   SHARE_DIR: "/model_bazaar"
@@ -57,6 +57,6 @@ env:
   ADMIN_MAIL: "admin@thirdai.com"
   ADMIN_PASSWORD: "password"
   IDENTITY_PROVIDER: "postgres"
-  DATABASE_URI: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/modelbazaar"
-  GRAFANA_DB_URL: "postgresql://postgres:4yChWUTjZ22x@test-eks.cjhmqzlwgr5q.us-east-1.rds.amazonaws.com:5432/grafana"
+  DATABASE_URI: "${MODELBAZAAR_DB_URI}"
+  GRAFANA_DB_URL: "${GRAFANA_DB_URL}"
   LICENSE_PATH: "/model_bazaar/license/ndb_enterprise_license.json"

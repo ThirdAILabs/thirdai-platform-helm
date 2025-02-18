@@ -61,33 +61,35 @@ Follow the instructions at the [Cluster Autoscaler repository](https://github.co
 For convenience, we have listed basic steps to deploy the Cluster Autoscaler on AWS EKS. These instructions can be found in different areas in the link above.
 
 1. From the AWS IAM policy console, or the AWS CLI, create the following policy:
-```yaml
-apiVersion: kops/v1alpha2
-kind: Cluster
-metadata:
-  name: my.cluster.internal
-spec:
-  additionalPolicies:
-    node: |
-      [
-        {"Effect":"Allow","Action":["autoscaling:DescribeAutoScalingGroups","autoscaling:DescribeAutoScalingInstances","autoscaling:DescribeLaunchConfigurations","autoscaling:DescribeTags","autoscaling:SetDesiredCapacity","autoscaling:TerminateInstanceInAutoScalingGroup"],"Resource":"*"}
-      ]
-      ...
----
-apiVersion: kops/v1alpha2
-kind: InstanceGroup
-metadata:
-  labels:
-    kops.k8s.io/cluster: my.cluster.internal
-  name: my-instances
-spec:
-  cloudLabels:
-    k8s.io/cluster-autoscaler/enabled: ""
-    k8s.io/cluster-autoscaler/my.cluster.internal: ""
-  image: kops.io/k8s-1.8-debian-jessie-amd64-hvm-ebs-2018-01-14
-  machineType: r4.large
-  maxSize: 4
-  minSize: 0
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeAutoScalingInstances",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:DescribeScalingActivities",
+        "ec2:DescribeImages",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeLaunchTemplateVersions",
+        "ec2:GetInstanceTypesFromInstanceRequirements",
+        "eks:DescribeNodegroup"
+      ],
+      "Resource": ["*"]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:TerminateInstanceInAutoScalingGroup"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}
 ```
 2. Create a role with the above policy created
 3. Run `helm install cluster-autoscaler autoscaler/cluster-autoscaler --namespace kube-system --set autoDiscovery.clusterName=<YOUR-EKS-CLUSTER-NAME> --set awsRegion=<YOUR-AWS-REGION> --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<YOUR-AWS-ACCOUNT-ID>:role/<ROLE-NAME-CREATED-ABOVE> --wait`

@@ -92,7 +92,16 @@ For convenience, we have listed basic steps to deploy the Cluster Autoscaler on 
 }
 ```
 2. Create a role with the above policy created
-3. Run `helm install cluster-autoscaler autoscaler/cluster-autoscaler --namespace kube-system --set autoDiscovery.clusterName=<YOUR-EKS-CLUSTER-NAME> --set awsRegion=<YOUR-AWS-REGION> --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<YOUR-AWS-ACCOUNT-ID>:role/<ROLE-NAME-CREATED-ABOVE> --wait`
+3. Run the following commands:
+```console
+$ helm repo add autoscaler https://kubernetes.github.io/autoscaler
+$ helm install cluster-autoscaler autoscaler/cluster-autoscaler \
+  --namespace kube-system \
+  --set autoDiscovery.clusterName=<YOUR-EKS-CLUSTER-NAME> \
+  --set awsRegion=<YOUR-AWS-REGION> \
+  --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<YOUR-AWS-ACCOUNT-ID>:role/<ROLE-NAME-CREATED-ABOVE> \
+  --wait
+```
 
 The Cluster Autoscaler will now be set up, and autoscale up or down within the bounds of your EKS cluster node groups.
 ---

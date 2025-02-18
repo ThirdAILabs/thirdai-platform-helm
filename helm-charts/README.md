@@ -53,4 +53,44 @@ helm uninstall thirdai-platform -n kube-system
 ```
 This will remove all resources associated with the platform.
 
+
+## Enabling Cluster Autoscaling
+Follow the instructions at the [Cluster Autoscaler repository](https://github.com/kubernetes/autoscaler/tree/master/charts/cluster-autoscaler#aws---using-auto-discovery-of-tagged-instance-groups) to enable cluster autoscaling. This will allow the dynamic addition and removal of nodes in your Kubernetes cluster.
+
+### AWS EKS Steps
+For convenience, we have listed basic steps to deploy the Cluster Autoscaler on AWS EKS. These instructions can be found in different areas in the link above.
+
+1. From the AWS IAM policy console, or the AWS CLI, create the following policy:
+```yaml
+apiVersion: kops/v1alpha2
+kind: Cluster
+metadata:
+  name: my.cluster.internal
+spec:
+  additionalPolicies:
+    node: |
+      [
+        {"Effect":"Allow","Action":["autoscaling:DescribeAutoScalingGroups","autoscaling:DescribeAutoScalingInstances","autoscaling:DescribeLaunchConfigurations","autoscaling:DescribeTags","autoscaling:SetDesiredCapacity","autoscaling:TerminateInstanceInAutoScalingGroup"],"Resource":"*"}
+      ]
+      ...
+---
+apiVersion: kops/v1alpha2
+kind: InstanceGroup
+metadata:
+  labels:
+    kops.k8s.io/cluster: my.cluster.internal
+  name: my-instances
+spec:
+  cloudLabels:
+    k8s.io/cluster-autoscaler/enabled: ""
+    k8s.io/cluster-autoscaler/my.cluster.internal: ""
+  image: kops.io/k8s-1.8-debian-jessie-amd64-hvm-ebs-2018-01-14
+  machineType: r4.large
+  maxSize: 4
+  minSize: 0
+```
+2. Create a role with the above policy created
+3. Run `helm install cluster-autoscaler autoscaler/cluster-autoscaler --namespace kube-system --set autoDiscovery.clusterName=<YOUR-EKS-CLUSTER-NAME> --set awsRegion=<YOUR-AWS-REGION> --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::<YOUR-AWS-ACCOUNT-ID>:role/<ROLE-NAME-CREATED-ABOVE> --wait`
+
+The Cluster Autoscaler will now be set up, and autoscale up or down within the bounds of your EKS cluster node groups.
 ---

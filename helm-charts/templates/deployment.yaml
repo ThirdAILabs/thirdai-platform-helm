@@ -59,7 +59,7 @@ spec:
       volumes:
       - name: shared-modelbazaar
         persistentVolumeClaim:
-          claimName: modelbazaar-efs-pvc
+          claimName: thirdai-platform-shared-dir-pvc
       - name: license-file
         secret:
           secretName: {{ .Values.licenseSecretName }}

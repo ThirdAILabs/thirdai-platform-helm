@@ -23,9 +23,8 @@ ingress:
 
 # EFS CSI Persistent Volume Claim settings
 efs:
-  storageClassName: efs-sc
-  size: "1Gi"
-  fileSystemId: "fs-0d3e07d89ce7898e5"
+  fileSystemId: "${EFS_FILE_SYSTEM_ID}"
+  shareDir: "/thirdai_platform/v1"
 
 modelbazaar_resources:
   requests:

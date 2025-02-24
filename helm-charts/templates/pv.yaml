@@ -10,4 +10,4 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   csi:
     driver: efs.csi.aws.com
-    volumeHandle: "{{ .Values.efs.fileSystemId }}::{{ .Values.efs.shareDir }}"
+    volumeHandle: "{{ .Values.efs.fileSystemId }}"

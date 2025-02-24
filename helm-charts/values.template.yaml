@@ -24,7 +24,6 @@ ingress:
 # EFS CSI Persistent Volume Claim settings
 efs:
   fileSystemId: "${EFS_FILE_SYSTEM_ID}"
-  shareDir: "/thirdai_platform/v1"
 
 modelbazaar_resources:
   requests:

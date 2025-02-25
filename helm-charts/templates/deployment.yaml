@@ -18,14 +18,36 @@ spec:
       serviceAccountName: modelbazaar-sa
 
       initContainers:
-        - name: copy-license
-          image: busybox
-          command: ['sh', '-c', 'mkdir -p /model_bazaar/license && cp /tmp/secret/ndb_enterprise_license.json /model_bazaar/license/ndb_enterprise_license.json']
-          volumeMounts:
-            - name: license-file
-              mountPath: /tmp/secret
-            - name: model-bazaar
-              mountPath: /model_bazaar
+      - name: copy-license
+        image: busybox
+        command:
+          - sh
+          - -c
+          - |
+            mkdir -p /model_bazaar/license &&
+            cp /tmp/secret/ndb_enterprise_license.json /model_bazaar/license/ndb_enterprise_license.json
+        volumeMounts:
+          - name: license-file
+            mountPath: /tmp/secret
+          - name: model-bazaar
+            mountPath: /model_bazaar
+
+      - name: download-pretrained-models
+        image: busybox
+        command:
+          - sh
+          - -c
+          - |
+            if [ ! -f /model_bazaar/pretrained-models/genai/Llama-3.2-1B-Instruct-f16.gguf ]; then
+              mkdir -p /model_bazaar/pretrained-models/genai &&
+              wget -O /model_bazaar/pretrained-models/genai/Llama-3.2-1B-Instruct-f16.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-f16.gguf;
+            else
+              echo "Pretrained model already exists, skipping download.";
+            fi
+        volumeMounts:
+          - name: model-bazaar
+            mountPath: /model_bazaar
+
 
       containers:
       - name: modelbazaar

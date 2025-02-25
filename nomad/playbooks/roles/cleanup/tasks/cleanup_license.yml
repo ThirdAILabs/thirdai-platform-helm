@@ -1,0 +1,24 @@
+---
+- name: Check if license directory exists
+  ansible.builtin.stat:
+    path: "{{ shared_file_system.shared_dir }}/license"
+  register: license_dir
+  ignore_errors: true
+
+- name: Remove main license file
+  ansible.builtin.file:
+    path: "{{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json"
+    state: absent
+  when: license_dir.stat.exists
+  ignore_errors: true
+
+- name: Remove license directory
+  ansible.builtin.file:
+    path: "{{ shared_file_system.shared_dir }}/license"
+    state: absent
+  when: license_dir.stat.exists
+  ignore_errors: true
+
+- name: Confirm license cleanup completion
+  ansible.builtin.debug:
+    msg: "License files and directory have been successfully cleaned up on {{ ansible_host }}."

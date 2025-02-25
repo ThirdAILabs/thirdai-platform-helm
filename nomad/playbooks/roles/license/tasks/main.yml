@@ -1,0 +1,9 @@
+---
+- name: Import tasks to copy the main license file
+  ansible.builtin.import_tasks: copy_license_file.yml
+
+- name: Import tasks to copy the airgapped license file
+  ansible.builtin.import_tasks: copy_airgapped_license_file.yml
+
+- name: Import tasks to set permissions for the license file
+  ansible.builtin.import_tasks: set_license_permissions.yml

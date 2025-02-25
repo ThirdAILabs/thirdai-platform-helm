@@ -1,0 +1,46 @@
+---
+- name: Copy model file to the appropriate directory
+  when:
+    - ansible_host_private_ip is defined
+    - critical_services_nodes[0].private_ip is defined
+    - ansible_host_private_ip == critical_services_nodes[0].private_ip
+  block:
+    - name: Log the start of model file synchronization
+      ansible.builtin.debug:
+        msg: "Starting the synchronization of {{ model_folder }} to {{ shared_file_system.shared_dir }}/pretrained-models"
+
+    - name: Ensure the pretrained-models directory exists
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/pretrained-models"
+        state: directory
+        group: nomad_nfs
+        mode: "0774"
+
+    - name: Ensure the generative model folder exists before syncing
+      ansible.builtin.stat:
+        path: "{{ model_folder }}"
+      register: model_folder_stat
+
+    - name: Fail if the generative model folder does not exist
+      ansible.builtin.fail:
+        msg: "Generative model folder {{ model_folder }} does not exist."
+      when: not model_folder_stat.stat.exists
+
+    - name: Synchronize the model folder to pretrained-models directory
+      ansible.posix.synchronize:
+        src: "{{ model_folder }}"
+        dest: "{{ shared_file_system.shared_dir }}"
+        mode: "push"
+      register: result
+      delegate_to: localhost
+
+    - name: Fail if model folder sync failed
+      ansible.builtin.fail:
+        msg: "Failed to sync the model folder to {{ shared_file_system.shared_dir }}/pretrained-models on {{ ansible_host }}. Error: {{ result }}"
+      when: result.rc != 0
+
+  rescue:
+    - name: Rollback - Remove the synchronized model folder on failure
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/pretrained-models"
+        state: absent

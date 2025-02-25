@@ -1,0 +1,37 @@
+- name: Bootstrap Nomad ACL system
+  when: ansible_host_private_ip == critical_services_ips[0]
+  block:
+    - name: Bootstrap Nomad ACL system
+      ansible.builtin.shell: |
+        set -o pipefail
+        sudo mkdir -p /opt/thirdai_platform/nomad_data
+        if [ ! -f "/opt/thirdai_platform/nomad_data/management_token.txt" ]; then
+          sudo bash -c "nomad acl bootstrap > /opt/thirdai_platform/nomad_data/management_token.txt 2>&1"
+        fi
+        management_token=$(grep 'Secret ID' "/opt/thirdai_platform/nomad_data/management_token.txt"  | awk '{print $NF}')
+        cd /opt/thirdai_platform
+        nomad acl policy apply -description "Task Runner policy" -token "$management_token" task-runner "/opt/thirdai_platform/nomad/nomad_node_configs/task_runner.policy.hcl"
+        nomad acl token create -name="Task Runner token" -policy=task-runner -type=client -token "$management_token" 2>&1 | sudo tee /opt/thirdai_platform/nomad_data/task_runner_token.txt > /dev/null
+        task_runner_token=$(grep 'Secret ID' "/opt/thirdai_platform/nomad_data/task_runner_token.txt"  | awk '{print $NF}')
+        nomad var put -namespace default -token "$management_token" -force nomad/jobs task_runner_token=$task_runner_token management_token=$management_token > /dev/null
+      args:
+        executable: /bin/bash
+      register: result
+      become: true
+
+    - name: Fail if Nomad ACL bootstrap failed
+      ansible.builtin.fail:
+        msg: "Failed to bootstrap Nomad ACL system on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove Nomad ACL configuration if bootstrap failed
+      ansible.builtin.shell: |
+        sudo rm -rf /opt/thirdai_platform/nomad_data
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Bootstrapping Nomad ACL system failed and rollback performed on {{ ansible_host }}."

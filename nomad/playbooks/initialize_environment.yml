@@ -1,0 +1,29 @@
+---
+- name: Set up inventory dynamically and define variables for remote execution
+  ansible.builtin.add_host:
+    name: "{{ node.name }}"
+    node_name: "{{ node.name }}"
+    ansible_host: >-
+      {% if node.connection_type == 'local' %}127.0.0.1{% else %}{{ node.private_ip }}{% endif %}
+    ansible_host_private_ip: "{{ node.private_ip }}"
+    ansible_user: "{{ node.ssh_username }}"
+    ansible_connection: "{{ 'local' if node.connection_type == 'local' else 'ssh' }}"  # Dynamically set connection type (local or ssh)
+    ansible_ssh_private_key_file: "{{ node.private_key | default('') }}"  # Set only if private_key is provided
+    ansible_ssh_common_args: >-
+      {% if node.connection_type != 'local' %}
+        {% if node.private_key|length == 0 %}
+          {% if node.ssh_common_args is defined and node.ssh_common_args|length > 0%}{{ node.ssh_common_args }}{% else %}-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null{% endif %}
+        {% else %}-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null{% endif %}
+      {% endif %}
+    model_folder: "{{ model_folder | default('') }}"
+    docker_images: "{{ docker_images | default('') }}"
+    platform_image_branch: "{{ cluster_config.platform_image_branch | default('release-test-main') }}"
+    
+    # Common facts for all host. Incase of onboard-clients, cleanup these are not required
+    admin_mail: "{{ secrets.admin_mail | default('') }}"
+    admin_username: "{{ secrets.admin_username | default('') }}"
+    admin_password: "{{ secrets.admin_password | default('') }}"
+    genai_key: "{{ secrets.genai_key | default('') }}"
+  loop: "{{ nodes }}"
+  loop_control:
+    loop_var: node

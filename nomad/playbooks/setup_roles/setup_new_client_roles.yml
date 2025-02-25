@@ -1,0 +1,40 @@
+---
+- name: Override the thirdai_platform_version if docker_images folder exists
+  ansible.builtin.set_fact:
+    thirdai_platform_version: >-
+      {%- if docker_images is defined and docker_images | length > 0 -%}
+      {{ docker_images | regex_findall('docker_images-(.*)') | last | default(cluster_config.thirdai_platform_version) }}
+      {%- else -%}
+      {{ cluster_config.thirdai_platform_version }}
+      {%- endif -%}
+
+- name: Print the value of thirdai_platform_version
+  ansible.builtin.debug:
+    msg: "The value of thirdai_platform_version is: {{ cluster_config.thirdai_platform_version }}"
+    
+- name: setup the server facts
+  ansible.builtin.include_tasks: setup_server_facts.yml
+  vars:
+    nodes: "{{ cluster_config.nodes | selectattr('roles', 'defined') | list }}"
+
+- name: setup the client facts
+  ansible.builtin.include_tasks: setup_client_facts.yml
+  vars:
+    nodes: "{{ new_client_config.nodes }}"
+
+- name: Save all the Private IPs from the cluster config and new client config
+  ansible.builtin.set_fact:
+    machine_private_ips: "{{ (cluster_config.nodes | map(attribute='private_ip') | list) + (new_client_config.nodes | map(attribute='private_ip') | list) }}"
+
+- name: Debug to see all set variables
+  ansible.builtin.debug:
+    msg:
+      - "shared_file_system: {{ shared_file_system }}"
+      - "critical_services_nodes: {{ critical_services_nodes }}"
+      - "critical_services_ips: {{ critical_services_ips }}"
+      - "sql_server: {{ sql_server | default([]) }}"
+      - "nfs_clients: {{ nfs_clients }}"
+      - "sql_clients: {{ sql_clients | default([]) }}"
+      - "machine_private_ips: {{ machine_private_ips }}" 
+  run_once: true
+  delegate_to: "{{ groups['all'] | last }}"

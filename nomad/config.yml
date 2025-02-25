@@ -1,0 +1,103 @@
+# config.yml
+
+# Path to the license file for ThirdAI Platform
+license_path: "/path/to/ndb_enterprise_license.json" # Replace with the absolute path to your ThirdAI Platform license file.
+
+# JWT secret used for token generation
+jwt_secret: "your-secure-jwt-secret" # Replace with a secure, randomly generated string for JWT token generation.
+
+# Preferably should be provided by aws-secret-manager or via prompt
+# Admin email address
+admin_mail: "your-admin-email@example.com" # Replace with the admin's email address.
+
+# Preferably should be provided by aws-secret-manager or via prompt
+# Admin username
+admin_username: "your-admin-username" # Replace with the desired admin username.
+
+# Preferably should be provided by aws-secret-manager or via prompt
+# Admin password
+admin_password: "your-secure-admin-password" # Replace with a secure password for the admin account.
+
+# Preferably should be provided by aws-secret-manager or via prompt
+# API key for using OpenAI services
+genai_key: "your-openai-api-key" # Replace with your OpenAI API key, keep it as empty string, if you don't need OpenAI summarization.
+
+# Version of ThirdAI Platform to deploy (only used if Docker images are not provided)
+thirdai_platform_version: "latest" # Typically "latest" or a specific version string.
+
+# Autoscaling settings
+autoscaling_enabled: true # Set to true to enable autoscaling, false to disable it.
+
+# Maximum number of VMs that autoscaling can provision
+autoscaler_max_count: 3 # Replace with the maximum number of VMs your setup allows.
+
+# Whether to use a self-hosted SQL server
+self_hosted_sql_server: true # Set to true if using a self-hosted SQL server, false if using an external one.
+
+# if self_hosted_sql_server is false make sure to pass the following URIs. Ensure that each database is accessible from each machines.
+external_modelbazaar_db_uri: ""
+# Ensure that 'pgcrypto' extension is added to the database if using postgres database.
+external_keycloak_db_uri: "" # Supported database type:['postgresql']
+# e.g: "postgresql://<user>:<password>@<host | user-db-1.wjnd29d2un92d.us-west-1.rds.amazonaws.com>:<port | 5432>/<db_name | keycloakdb>"
+external_grafana_db_uri: "" # Supported database type: ['postgres']
+# e.g: "postgres://<user>:<password>@<host | user-db-1.wjnd29d2un92d.us-west-1.rds.amazonaws.com>:<port | 5432>/<db_name | grafana>?sslmode=require"
+
+# Whether to create an NFS server for shared storage
+create_nfs_server: true # Set to true to create an NFS server for shared storage, false otherwise.
+
+restore_path: "" # If you want to restore provide the path to the zip file.
+
+# Whether to use keycloak as login method or Postgres
+login_method: "keycloak"
+
+# Endpoint (Public or Private) used to access the cluster.
+# This can be a public IP/domain for public clusters or a private endpoint for private clusters.
+# Make sure this endpoint is just domain, no need to include the protocol or '/'
+cluster_endpoint: "1.2.3.4"
+
+# Node configuration
+nodes:
+  - name: "node1" # Replace with a unique name for the node.
+    private_ip: "192.168.0.10" # Replace with the private IP address of the node.
+    ssh_username: "" # Replace with the SSH username for the node (typically "ubuntu" for AWS Ubuntu, "ec2-user" for AWS Amazon Linux).
+
+    connection_type:
+      "ssh" # Defaults to "ssh", meaning Ansible will connect to this node using an SSH client.
+      # You can set this to "local" if the node is the local machine where Ansible is running,
+      # in which case Ansible will install all libraries directly on the local host without using SSH.
+
+    private_key:
+      "" # Path to the SSH private key for this node.
+      # Leave as "" if you have direct SSH access from the host or the host is already trusted.
+
+    ssh_common_args:
+      "" # Optional: If no private key is used, specify additional SSH options here.
+      # Leave this empty ("") if you use `private_key` or direct SSH access.
+
+    roles:
+      critical_services: 
+        run_jobs: True # Set to true if this node should run critical services such as the Nomad Server, Consul Server, etc.
+      sql_server:
+        database_dir: "/opt/thirdai_platform/database" # Replace with the directory where the SQL server should store its database files.
+        database_password: "S123kP923wX311TqZ523v" # Replace with a strong, secure password for production environments without any special character.
+      shared_file_system:
+        shared_dir: "/opt/thirdai_platform/model_bazaar" # Replace with the directory to be used for shared file storage.
+
+  - name: "node2" # Another node in the cluster.
+    private_ip: "192.168.0.11" # Private IP of this node.
+    ssh_username: "" # Replace with the SSH username for the node (typically "ubuntu" for AWS Ubuntu, "ec2-user" for AWS Amazon Linux).
+
+    connection_type:
+      "ssh" # Defaults to "ssh", meaning Ansible will connect to this node using an SSH client.
+      # You can set this to "local" if the node is the local machine where Ansible is running,
+      # in which case Ansible will install all libraries directly on the local host without using SSH.
+
+    private_key:
+      "" # Leave this empty if there's no private key and you're using `ssh_common_args`.
+      # If a private key is available, set the path here.
+
+    ssh_common_args:
+      "" # Optional: If no private key is used, specify additional SSH options here.
+      # Leave this empty ("") if you use `private_key` or direct SSH access.
+
+    roles: {} # This node does not have specific roles assigned (can be updated).

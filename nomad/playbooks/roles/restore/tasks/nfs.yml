@@ -1,0 +1,94 @@
+- name: Copy files from zip to existing NFS folders
+  when: ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Check if the backup zip file exists
+      stat:
+        path: "{{ shared_file_system.shared_dir }}/zip_uploads/{{ restore_path | basename }}"
+      register: zip_file_exists
+
+    - name: Fail if zip file does not exist
+      ansible.builtin.fail:
+        msg: "The specified zip file does not exist: {{ shared_file_system.shared_dir }}/zip_uploads/{{ restore_path | basename }}"
+      when: not zip_file_exists.stat.exists
+
+    - name: Install unzip if not present (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: unzip
+        state: present
+      when: ansible_pkg_mgr == "apt"
+
+    # Install unzip for Amazon Linux 2
+    - name: Install unzip if not present (Amazon Linux 2)
+      ansible.builtin.command: yum install -y unzip
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+
+    # Install unzip for Amazon Linux 2023
+    - name: Install unzip if not present (Amazon Linux 2023)
+      ansible.builtin.dnf:
+        name: unzip
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+
+    - name: Create a temporary directory for extraction
+      file:
+        path: "/tmp/extracted_backup"
+        state: directory
+        mode: "0755"
+
+    - name: Extract contents of zip file to temporary directory
+      unarchive:
+        src: "{{ shared_file_system.shared_dir }}/zip_uploads/{{ restore_path | basename }}"
+        dest: "/tmp/extracted_backup"
+        remote_src: yes
+      when: zip_file_exists.stat.exists
+
+    - name: Define folders and their required status
+      set_fact:
+        folders:
+          - { name: 'license', compulsory: true }
+          - { name: 'models', compulsory: true }
+          - { name: 'data', compulsory: true }
+          - { name: 'users', compulsory: false }
+          - { name: 'nomad-monitoring', compulsory: true }
+          - { name: 'pretrained-models', compulsory: true }
+          - { name: 'node_status', compulsory: true }
+          - { name: 'llm_cache.ndb', compulsory: false }
+          - { name: 'generated_data', compulsory: false}
+
+    - name: Check if folders exist in the extracted zip
+      stat:
+        path: "/tmp/extracted_backup/{{ item.name }}"
+      loop: "{{ folders }}"
+      register: folder_stat
+
+    - name: Fail if a compulsory folder does not exist
+      ansible.builtin.fail:
+        msg: "Compulsory folder {{ item.item.name }} does not exist in the backup."
+      when: not item.stat.exists and item.item.compulsory
+      loop: "{{ folder_stat.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Copy folders to NFS if they exist
+      copy:
+        src: "/tmp/extracted_backup/{{ item.item.name }}"
+        dest: "{{ shared_file_system.shared_dir }}"
+        owner: root
+        group: nomad_nfs
+        mode: "0774"
+        remote_src: yes
+      when: item.stat.exists
+      loop: "{{ folder_stat.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Remove the uploaded zip file 
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/zip_uploads"
+        state: absent
+      ignore_errors: true
+
+  rescue:
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Failed during the process of copying files from zip to NFS on {{ ansible_host }}."

@@ -1,0 +1,89 @@
+---
+- name: Cleanup NFS Client Configuration (Non-Server Nodes)
+  when: ansible_host_private_ip != shared_file_system.private_ip
+  block:
+    - name: Unmount NFS shared directory if mounted
+      ansible.posix.mount:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: unmounted
+      ignore_errors: true
+
+    - name: Remove NFS mount entry from /etc/fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: "^{{ shared_file_system.private_ip }}:{{ shared_file_system.shared_dir }} {{ shared_file_system.shared_dir }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove NFS client shared directory
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: absent
+      ignore_errors: true
+
+- name: Cleanup NFS Server Configuration (NFS Server Node)
+  when: ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Stop NFS server service on Debian/Ubuntu
+      ansible.builtin.systemd:
+        name: nfs-kernel-server
+        state: stopped
+        enabled: no
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Stop NFS server service on Amazon Linux
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: stopped
+        enabled: no
+      when: ansible_pkg_mgr == "dnf" or (ansible_distribution == "Amazon" and ansible_distribution_version == "2")
+      ignore_errors: true
+
+    - name: Remove NFS server export configuration from /etc/exports
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        regexp: "^{{ shared_file_system.shared_dir }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Apply exportfs to unshare NFS directories
+      ansible.builtin.command: exportfs -ua
+      ignore_errors: true
+
+    - name: Remove NFS shared subdirectories
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - license
+        - models
+        - data
+        - users
+        - nomad-monitoring
+        - pretrained-models
+        - keycloak-themes
+      ignore_errors: true
+
+    - name: Remove top-level NFS shared directory
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove nomad_nfs user
+      ansible.builtin.user:
+        name: nomad_nfs
+        state: absent
+      ignore_errors: true
+
+    - name: Remove nomad_nfs group
+      ansible.builtin.group:
+        name: nomad_nfs
+        state: absent
+      ignore_errors: true
+
+- name: Confirm NFS cleanup completion
+  ansible.builtin.debug:
+    msg: "NFS configuration, directories, and permissions have been successfully cleaned up on {{ ansible_host }}."
+  when: ansible_host_private_ip == shared_file_system.private_ip

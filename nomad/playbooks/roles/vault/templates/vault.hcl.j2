@@ -1,0 +1,28 @@
+storage "raft" {
+    path = "/opt/vault/data"
+    node_id = "{{ node_id }}"
+
+    {% for ip in critical_services_ips %}
+    {% if ip != ansible_host_private_ip %}
+    retry_join {
+        leader_api_addr = "http://{{ ip }}:8200"
+    }
+    {% endif %}
+    {% endfor %}
+}
+
+service_registration "consul" {
+  address = "http://127.0.0.1:8500"
+}
+
+listener "tcp" {
+   address = "0.0.0.0:8200"
+   tls_disable = 1
+}
+
+api_addr = "http://{{ ansible_host_private_ip }}:8200"
+cluster_addr = "http://{{ ansible_host_private_ip }}:8201"
+disable_mlock = true
+ui = true
+log_level = "trace"
+cluster_name = "ThirdAI Platform Vault"

@@ -1,0 +1,21 @@
+---
+- name: Cleanup Nomad folder
+  ansible.builtin.file:
+    path: /opt/nomad
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Cleanup Consul folder
+  ansible.builtin.file:
+    path: /opt/consul
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Cleanup ThirdAI Platform folder
+  ansible.builtin.file:
+    path: /opt/thirdai_platform
+    state: absent
+  ignore_errors: true
+  tags: cleanup

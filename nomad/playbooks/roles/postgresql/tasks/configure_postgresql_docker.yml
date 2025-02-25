@@ -1,0 +1,126 @@
+---
+- name: Configure PostgreSQL Docker
+  block:
+    - name: Create init-db.sh script
+      block:
+        - name: Copy init-db.sh script
+          ansible.builtin.copy:
+            content: |
+              #!/bin/bash
+              {
+                  echo "host  all all 172.17.0.0/16  md5"
+                  {% for IP in sql_clients %}
+                  echo "host  all all {{ IP }}/32  md5"
+                  {% endfor %}
+              } >> "$PGDATA/pg_hba.conf"
+            dest: "{{ sql_server.database_dir }}/docker-postgres-init/init-db.sh"
+            mode: "0755"
+            owner: postgres
+            group: postgres
+          register: result
+
+        - name: Fail if init-db.sh script creation failed
+          ansible.builtin.fail:
+            msg: "Failed to create init-db.sh script on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+
+      rescue:
+        - name: Rollback - Remove init-db.sh script on failure
+          ansible.builtin.file:
+            path: "{{ sql_server.database_dir }}/docker-postgres-init/init-db.sh"
+            state: absent
+          ignore_errors: true
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Creation of init-db.sh script failed and rollback performed on {{ ansible_host }}."
+
+    - name: Load PostgreSQL Docker image from tarball if docker_images is defined and non-empty
+      community.docker.docker_image:
+        load_path: "{{ docker_images }}/postgres_latest.tar" # Adjust the path as necessary
+        name: "postgres"
+        tag: "latest"
+        state: present
+        source: load
+      when: docker_images is defined and docker_images | length > 0
+
+    - name: Pull PostgreSQL Docker image from remote registry if docker_images is not defined or empty
+      community.docker.docker_image:
+        name: "postgres"
+        tag: "latest"
+        source: pull
+        state: present
+      when: docker_images is not defined or docker_images | length == 0
+
+    - name: Stop existing PostgreSQL container
+      block:
+        - name: Stop PostgreSQL container if running
+          community.docker.docker_container:
+            name: thirdai-platform-postgresql-server
+            state: absent
+          register: result
+
+        - name: Fail if stopping PostgreSQL container failed
+          ansible.builtin.fail:
+            msg: "Failed to stop existing PostgreSQL container on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+      rescue:
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Stopping PostgreSQL container failed on {{ ansible_host }}."
+
+    - name: Run PostgreSQL container
+      block:
+        - name: Start PostgreSQL container
+          community.docker.docker_container:
+            name: thirdai-platform-postgresql-server
+            image: postgres
+            state: started
+            restart_policy: always
+            env:
+              POSTGRES_PASSWORD: "{{ sql_server.database_password }}"
+              POSTGRES_DB: modelbazaar
+              POSTGRES_USER: "{{ sql_server.username }}"
+            volumes:
+              - "{{ sql_server.database_dir }}/docker-postgres-init:/docker-entrypoint-initdb.d"
+              - "{{ sql_server.database_dir }}/data:/var/lib/postgresql/data"
+            ports:
+              - "5432:5432"
+          register: result
+
+        - name: Fail if starting PostgreSQL container failed
+          ansible.builtin.fail:
+            msg: "Failed to start PostgreSQL container on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+      rescue:
+        - name: Rollback - Stop PostgreSQL container on failure
+          community.docker.docker_container:
+            name: thirdai-platform-postgresql-server
+            state: absent
+          ignore_errors: true
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Starting PostgreSQL container failed and rollback performed on {{ ansible_host }}."
+    
+    - name: Wait for PostgresQL container to start
+      wait_for:
+        port: 5432
+        host: "{{ sql_server.private_ip }}"
+        delay: 10
+
+    - name: Create additional databases
+      community.postgresql.postgresql_db:
+        name: "{{ item }}"
+        state: present
+        login_user: "{{ sql_server.username }}"
+        login_password: "{{ sql_server.database_password }}"
+        login_host: "{{ sql_server.private_ip }}"
+        owner: "{{ sql_server.username }}"
+      loop:
+        - grafana
+        - keycloakdb
+      register: result
+
+    - name: Fail if DB creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create database(s) on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed

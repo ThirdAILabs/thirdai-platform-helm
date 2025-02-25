@@ -1,0 +1,29 @@
+---
+- name: Copy license file to one of the critical service server
+  when: ansible_host_private_ip == critical_services_nodes[0].private_ip
+  block:
+    - name: Copy the license file
+      ansible.builtin.copy:
+        src: "{{ cluster_config.license_path }}"
+        dest: "{{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json"
+        owner: "{{ critical_services_nodes[0].ssh_username }}"
+        group: nomad_nfs
+        mode: "0664"
+      register: result
+
+    - name: Fail if license file copy failed
+      ansible.builtin.fail:
+        msg: "Failed to copy the license file to {{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove copied license file on failure
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json"
+        state: absent
+      when: ansible_host_private_ip == critical_services_nodes[0].private_ip
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "License file copy failed and rollback performed on {{ ansible_host }}."

@@ -1,0 +1,21 @@
+---
+- name: Set up PostgreSQL user, group, and directories
+  ansible.builtin.import_tasks: setup_postgresql_user_group.yml
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+
+- name: Install required packages
+  ansible.builtin.import_tasks: install_libraries.yml
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+
+- name: Configure PostgreSQL Docker container
+  ansible.builtin.import_tasks: configure_postgresql_docker.yml
+  when:
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+
+- name: Update SQL URI in Nomad
+  ansible.builtin.import_tasks: update_sql_uri.yml

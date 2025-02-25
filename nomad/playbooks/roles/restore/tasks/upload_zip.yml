@@ -1,0 +1,54 @@
+- name: Upload the zip file to the appropriate directory
+  when:
+    - ansible_host_private_ip is defined
+    - critical_services_nodes[0].private_ip is defined
+    - ansible_host_private_ip == critical_services_nodes[0].private_ip
+  block:
+    - name: Log the start of zip file upload
+      ansible.builtin.debug:
+        msg: "Starting the upload of {{ restore_path }} to {{ shared_file_system.shared_dir }}/zip_uploads"
+
+    - name: Ensure the zip_uploads directory exists
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/zip_uploads"
+        state: directory
+        group: nomad_nfs
+        mode: "0774"
+
+    - name: Ensure the zip file exists before uploading
+      ansible.builtin.stat:
+        path: "{{ restore_path }}"
+      register: zip_file_stat
+      delegate_to: localhost
+      become: false
+
+    - name: Fail if the zip file does not exist
+      ansible.builtin.fail:
+        msg: "Zip file {{ restore_path }} does not exist."
+      when: not zip_file_stat.stat.exists
+
+    - name: Synchronize the zip file to the zip_uploads directory
+      ansible.posix.synchronize:
+        src: "{{ restore_path }}"
+        dest: "{{ shared_file_system.shared_dir }}/zip_uploads/"
+        mode: "push"
+        private_key: "{{ ansible_ssh_private_key_file }}"
+      register: upload_result
+      delegate_to: localhost
+      become: false
+
+    - name: Fail if zip file upload failed
+      ansible.builtin.fail:
+        msg: "Failed to upload the zip file to {{ shared_file_system.shared_dir }}/zip_uploads on {{ ansible_host }}. Error: {{ upload_result }}"
+      when: upload_result is failed
+
+  rescue:
+    - name: Rollback - Remove the uploaded zip file on failure
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/zip_uploads/{{ restore_path | basename }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Uploading zip file failed and rollback performed on {{ ansible_host }}."

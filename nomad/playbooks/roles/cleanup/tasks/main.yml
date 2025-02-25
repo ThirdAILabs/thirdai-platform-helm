@@ -1,0 +1,36 @@
+---
+- name: Cleanup Nomad Jobs
+  ansible.builtin.import_tasks: cleanup_nomad_jobs.yml
+
+- name: Cleanup Docker registry
+  ansible.builtin.import_tasks: cleanup_docker_registry.yml
+
+- name: Cleanup Certs Folder
+  ansible.builtin.import_tasks: cleanup_certs.yml
+  when: ansible_host_private_ip == critical_services_ips[0]
+
+- name: Cleanup Postgresql Folder
+  ansible.builtin.import_tasks: cleanup_postgresql.yml
+
+- name: Cleanup Docker Images
+  ansible.builtin.import_tasks: cleanup_docker_images.yml
+
+- name: Cleanup Vault
+  ansible.builtin.import_tasks: cleanup_vault.yml
+
+- name: Cleanup Nomad
+  ansible.builtin.import_tasks: cleanup_nomad.yml
+
+- name: Cleanup Consul
+  ansible.builtin.import_tasks: cleanup_consul.yml
+
+- name: Cleanup License
+  ansible.builtin.import_tasks: cleanup_license.yml
+  when: ansible_host_private_ip == shared_file_system.private_ip
+
+- name: Cleanup NFS
+  ansible.builtin.import_tasks: cleanup_nfs.yml
+
+- name: Cleanup Nomad and ThirdAI Platform Folders
+  ansible.builtin.import_tasks: cleanup_nomad_thirdai.yml
+  become: true

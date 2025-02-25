@@ -1,0 +1,23 @@
+---
+- name: Ensure all nodes have required fields
+  fail:
+    msg: "Node {{ item.0.name }} has an empty value for field: {{ item.1 }}"
+  when: (item.1 not in item.0) or (item.0[item.1] | length) == 0
+  with_items:
+    - "{{ nodes | product(required_fields) | list }}"
+  vars:
+    required_fields: ["name", "private_ip", "ssh_username", "connection_type"]
+
+- name: Ensure all nodes have unique private IP
+  fail:
+    msg: "Nodes with duplicate private IP addresses detected."
+  when: "{{ unique_ips | length != nodes | length }}"
+  vars:
+    unique_ips: "{{ nodes | map(attribute='private_ip') | list | unique }}"
+
+- name: Ensure all nodes have unique name
+  fail:
+    msg: "Nodes with duplicate names detected."
+  when: "{{ unique_names | length != nodes | length }}"
+  vars:
+    unique_names: "{{ nodes | map(attribute='name') | list | unique }}"

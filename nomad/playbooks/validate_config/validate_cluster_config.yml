@@ -1,0 +1,144 @@
+---
+- name: Ensure all required top-level fields are present
+  fail:
+    msg: "Missing required top-level field: {{ item }}"
+  when: "{{ item }} is not defined or {{ item }} | string | length == 0"
+  loop:
+    - cluster_config.license_path
+    - cluster_config.jwt_secret
+    - cluster_config.thirdai_platform_version
+    - cluster_config.autoscaling_enabled
+    - cluster_config.autoscaler_max_count
+    - cluster_config.self_hosted_sql_server
+    - cluster_config.create_nfs_server
+    - cluster_config.nodes
+    - cluster_config.login_method
+    - cluster_config.cluster_endpoint
+#TODO (Anyone): Modify this to access common attributes without `cluster_config.` prefix
+
+- name: Validate cluster_endpoint format
+  vars:
+    ipv4_regex: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ipv6_regex: '^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})$'
+    domain_regex: '^(?!-)(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,6}$'
+  fail:
+    msg: >
+      cluster_endpoint "{{ cluster_config.cluster_endpoint }}" must be a valid IPv4, IPv6 address,
+      or domain name without protocol or trailing slash.
+  when: >
+    not (cluster_config.cluster_endpoint is match(ipv4_regex) or
+          cluster_config.cluster_endpoint is match(ipv6_regex) or
+          cluster_config.cluster_endpoint is match(domain_regex))
+
+- name: Validate docker_images folder if defined
+  fail:
+    msg: "The docker_images folder must be in the format docker_images-<version>, e.g., docker_images-v1.0.0. but got {{ docker_images }}"
+  when:
+    - docker_images is defined
+    - docker_images | length > 0
+    - not docker_images is match('.*/docker_images-.*')
+
+- name: Check if docker_registry_password is provided.
+  fail:
+    msg: "Provide docker_registry_password in config.yml when using a different platform branch without offline docker images"
+  when:
+    - docker_images is not defined or docker_images | length == 0
+    - cluster_config.platform_image_branch is defined and cluster_config.platform_image_branch != 'release-test-main'
+    - cluster_config.docker_registry_password is not defined or cluster_config.docker_registry_password | length == 0
+
+- name: Ensure externally managed Database URIs are provided if not using self hosted sql server
+  when: not cluster_config.self_hosted_sql_server
+  block:
+    - name: Ensure all externally managed database URIs are provided.
+      fail:
+        msg: >-
+          When self_hosted_sql_server is false, the following variables must be
+          provided and non-empty:
+          - external_modelbazaar_db_uri
+          - external_keycloak_db_uri
+          - external_grafana_db_uri
+      when:
+        - cluster_config.external_modelbazaar_db_uri is not defined or cluster_config.external_modelbazaar_db_uri | length == 0 or
+          cluster_config.external_keycloak_db_uri is not defined or cluster_config.external_keycloak_db_uri | length == 0 or
+          cluster_config.external_grafana_db_uri is not defined or cluster_config.external_grafana_db_uri | length == 0
+
+    - name: Ensure grafana supports this database type
+      fail:
+        msg: Unsupported grafana database type
+      when: (cluster_config.external_grafana_db_uri | urlsplit('scheme')) not in ['postgres'] # Grafana also support `mysql` but not adding to the list because it is not tested.
+
+    - name: Ensure keycloak support this database type
+      fail:
+        msg: Unsupported keycloak database type
+      when: (cluster_config.external_keycloak_db_uri | urlsplit('scheme')) not in ['postgresql'] # Keycloak also support ['mariadb', 'mssql', 'mysql', 'oracle'] but not adding to the list because it is not tested.
+
+- name: Common validations of the nodes
+  include_tasks: common_config_validations.yml
+  vars:
+    nodes: "{{ cluster_config.nodes }}"
+
+- name: Validate specific subfields in roles
+  block:
+    # AL2 is throwing weird issues with just jinja rendering
+    - name: Collect critical services nodes
+      ansible.builtin.set_fact:
+        critical_services_nodes: >-
+          {{
+            (critical_services_nodes | default([])) + [{
+              'private_ip': item.private_ip
+            }]
+          }}
+      when: "'critical_services' in item.roles"
+      loop: "{{ cluster_config.nodes }}"
+
+    - name: Ensure at least one node has critical_services role and the number of such nodes is odd
+      vars:
+        critical_services_node_count: "{{ critical_services_nodes | length | int }}"
+      fail:
+        msg: >
+          "There must be at least one node with the critical_services role,
+          and the total number of such nodes must be odd. Current count: {{ critical_services_node_count }}."
+      when: critical_services_node_count == 0 or (critical_services_node_count | int) % 2 == 0
+
+    - name: Ensure at least one node has the 'sql_server' role defined if using self_hosted_sql_server
+      fail:
+        msg: "No node has the 'sql_server' role defined"
+      when:
+        - cluster_config.self_hosted_sql_server
+        - not (cluster_config.nodes | selectattr('roles.sql_server', 'defined') | list | length > 0)
+
+    - name: Ensure at least one node has the 'shared_file_system' role defined
+      fail:
+        msg: "No node has the 'shared_file_system' role defined"
+      when: not (cluster_config.nodes | selectattr('roles.shared_file_system', 'defined') | list | length > 0)
+
+    - name: Check if critical_services role is defined and has required subfields
+      fail:
+        msg: "critical_services role on {{ item.name }} is missing 'run_jobs'"
+      when: item.roles.critical_services is defined and item.roles.critical_services.run_jobs is not defined
+      loop: "{{ cluster_config.nodes }}"
+      loop_control:
+        loop_var: item
+
+    - name: Check if sql_server role is defined and has required subfields
+      fail:
+        msg: "sql_server role on {{ item.name }} is missing required fields"
+      when:
+        - cluster_config.self_hosted_sql_server
+        - item.roles.sql_server is defined
+        - (item.roles.sql_server.database_dir is not defined or item.roles.sql_server.database_password is not defined)
+      loop: "{{ cluster_config.nodes }}"
+      loop_control:
+        loop_var: item
+
+    - name: Check if shared_file_system role is defined and has required subfields
+      fail:
+        msg: "shared_file_system role on {{ item.name }} is missing 'shared_dir'"
+      when: item.roles.shared_file_system is defined and item.roles.shared_file_system.shared_dir is not defined
+      loop: "{{ cluster_config.nodes }}"
+      loop_control:
+        loop_var: item
+
+- name: All validations passed successfully
+  debug:
+    msg: "All validations have passed successfully. The configuration is valid."

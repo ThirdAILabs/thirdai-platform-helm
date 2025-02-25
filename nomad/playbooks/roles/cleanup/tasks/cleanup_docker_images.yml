@@ -1,0 +1,35 @@
+---
+- name: Define list of image repository names to delete
+  ansible.builtin.set_fact:
+    images_to_delete:
+      - "thirdaiplatform.azurecr.io/thirdai_platform_{{ platform_image_branch }}"
+      - "thirdaiplatform.azurecr.io/frontend_{{ platform_image_branch }}"
+      - "thirdaiplatform.azurecr.io/keycloak"
+      - "thirdaiplatform.azurecr.io/grafana"
+      - "thirdaiplatform.azurecr.io/victoria-metrics"
+      - "thirdaiplatform.azurecr.io/traefik"
+      - "thirdaiplatform.azurecr.io/nomad-autoscaler"
+
+# since nomad is stopped, there shouldn't be any running container
+
+- name: Find and delete containers using images
+  ansible.builtin.shell: |
+    docker ps --filter "ancestor={{ item }}" --format '{{ "{{.ID}}" }}' | xargs -r docker rm -f
+  loop: "{{ images_to_delete }}"
+  changed_when: true
+  ignore_errors: true
+
+- name: Remove Docker images by repository name
+  ansible.builtin.shell: |
+    docker images --format '{{ "{{.Repository}}:{{.Tag}}" }} {{ "{{.ID}}" }}' | grep -E '^{{ item }}:' | awk '{print $2}' | xargs -r docker rmi -f
+  loop: "{{ images_to_delete }}"
+  changed_when: true
+
+- name: Verify deletion of images
+  ansible.builtin.command:
+    cmd: "docker images -q {{ item }}"
+  loop: "{{ images_to_delete }}"
+  register: verify_deletion
+  retries: 3
+  delay: 5
+  until: verify_deletion.stdout == ''

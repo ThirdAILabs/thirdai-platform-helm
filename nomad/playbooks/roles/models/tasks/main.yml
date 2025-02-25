@@ -1,0 +1,6 @@
+---
+- name: Install the related libraries
+  ansible.builtin.import_tasks: install.yml
+
+- name: Import tasks to copy the model file
+  ansible.builtin.import_tasks: upload_model.yml

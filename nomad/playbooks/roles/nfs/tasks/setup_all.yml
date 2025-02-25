@@ -1,0 +1,71 @@
+---
+- name: Ensure nomad_nfs group exists
+  block:
+    - name: Create nomad_nfs group
+      ansible.builtin.group:
+        name: nomad_nfs
+        gid: 4646
+        state: present
+      register: result
+
+    - name: Fail if nomad_nfs group creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create nomad_nfs group on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+  rescue:
+    - name: Rollback - Remove nomad_nfs group on failure
+      ansible.builtin.group:
+        name: nomad_nfs
+        state: absent
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Creation of nomad_nfs group failed and rollback performed on {{ ansible_host }}."
+
+- name: Ensure nomad_nfs user exists
+  block:
+    - name: Create nomad_nfs user
+      ansible.builtin.user:
+        name: nomad_nfs
+        uid: 4646
+        group: nomad_nfs
+        state: present
+      register: result
+
+    - name: Fail if nomad_nfs user creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create nomad_nfs user on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+  rescue:
+    - name: Rollback - Remove nomad_nfs user on failure
+      ansible.builtin.user:
+        name: nomad_nfs
+        state: absent
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Creation of nomad_nfs user failed and rollback performed on {{ ansible_host }}."
+
+- name: Add ansible_user to nomad_nfs group
+  block:
+    - name: Add ansible_user to nomad_nfs group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: nomad_nfs
+        append: true
+      register: result
+
+    - name: Fail if adding ansible_user to group failed
+      ansible.builtin.fail:
+        msg: "Failed to add {{ ansible_user }} to nomad_nfs group on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+  rescue:
+    - name: Rollback - Remove ansible_user from nomad_nfs group on failure
+      ansible.builtin.command: gpasswd -d {{ ansible_user }} nomad_nfs
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Adding {{ ansible_user }} to nomad_nfs group failed and rollback performed on {{ ansible_host }}."

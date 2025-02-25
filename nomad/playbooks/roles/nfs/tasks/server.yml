@@ -1,0 +1,139 @@
+---
+- name: Install NFS server on the designated NFS server node
+  when: 
+    - cluster_config.create_nfs_server
+  block:
+    - name: Install NFS server packages
+      ansible.builtin.apt:
+        name:
+          - nfs-kernel-server
+          - acl
+        state: present
+        update_cache: true
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+
+    - name: Install NFS server packages on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name:
+          - nfs-utils
+          - acl
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+
+    - name: Install NFS server packages on Amazon Linux 2 using yum (command)
+      ansible.builtin.command: yum install -y nfs-utils acl
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum
+
+    - name: Fail if NFS server installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install NFS server packages on {{ ansible_host }}. Error: {{ result }}"
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)
+
+    - name: Set default ACLs on NFS shared directories
+      ansible.posix.acl:
+        path: "{{ shared_file_system.shared_dir }}"
+        entity: "{{ item.entity }}"
+        etype: "{{ item.etype }}"
+        permissions: "{{ item.permissions }}"
+        state: present
+        default: true
+        recursive: true
+      loop:
+        - { entity: "root", etype: "user", permissions: "rwx" }
+        - { entity: "nomad_nfs", etype: "group", permissions: "rwx" }
+        - { entity: "", etype: "other", permissions: "r" }
+      register: result_acl
+
+    - name: Fail if setting default ACLs failed
+      ansible.builtin.fail:
+        msg: "Failed to set default ACLs on NFS directories on {{ ansible_host }}. Error: {{ result_acl }}"
+      when: result_acl is failed
+
+    - name: Configure /etc/exports for NFS clients
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        line: "{{ shared_file_system.shared_dir }} {{ item.private_ip }}(rw,sync,no_subtree_check,all_squash,anonuid=0,anongid=4646)"
+        create: true
+        mode: "0644"
+      loop: "{{ nfs_clients }}"
+      register: result_exports
+
+    - name: Fail if configuring /etc/exports failed
+      ansible.builtin.fail:
+        msg: "Failed to configure /etc/exports for NFS clients on {{ ansible_host }}. Error: {{ result_exports }}"
+      when: result_exports is failed
+
+    - name: Ensure NFS service is running on Debian-based systems
+      ansible.builtin.systemd:
+        name: nfs-kernel-server
+        state: restarted
+        enabled: true
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt_service
+
+    - name: Ensure NFS service is running on Amazon Linux 2023
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: restarted
+        enabled: true
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf_service
+
+    - name: Ensure NFS service is running on Amazon Linux 2
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: restarted
+        enabled: true
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum_service
+
+    - name: Fail if ensuring NFS service is running failed
+      ansible.builtin.fail:
+        msg: "Failed to ensure NFS service is running on {{ ansible_host }}. Error: {{ result_service }}"
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt_service is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf_service is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum_service is failed)
+
+    - name: Apply NFS export configuration
+      ansible.builtin.command: exportfs -ra
+      changed_when: false
+      register: result_exportfs
+
+    - name: Fail if applying NFS export configuration failed
+      ansible.builtin.fail:
+        msg: "Failed to apply NFS export configuration on {{ ansible_host }}. Error: {{ result_exportfs }}"
+      when: result_exportfs is failed
+  rescue:
+    - name: Rollback - Uninstall NFS server packages on Debian/Ubuntu
+      ansible.builtin.apt:
+        name:
+          - nfs-kernel-server
+          - acl
+        state: absent
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Rollback - Uninstall NFS server packages on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name:
+          - nfs-utils
+          - acl
+        state: absent
+      when: ansible_pkg_mgr == "dnf"
+      ignore_errors: true
+
+    - name: Rollback - Uninstall NFS server packages on Amazon Linux 2
+      ansible.builtin.command: yum remove -y nfs-utils acl
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "NFS server installation or configuration failed on {{ ansible_host }}. Rollback performed."

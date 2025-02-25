@@ -1,0 +1,32 @@
+---
+- name: Admin username input
+  ansible.builtin.pause:
+    prompt: Enter the admin username
+    echo: false
+  register: admin_username
+
+- name: Admin password input
+  ansible.builtin.pause:
+    prompt: Enter the admin password
+    echo: false
+  register: admin_password
+
+- name: Admin mail input
+  ansible.builtin.pause:
+    prompt: Enter the admin mail
+    echo: false
+  register: admin_mail
+
+- name: Genai key input
+  ansible.builtin.pause:
+    prompt: Enter the genai-key
+    echo: false
+  register: genai_key
+
+- name: set the secrets
+  ansible.builtin.set_fact:
+    secrets:
+      admin_mail: "{{ admin_mail.user_input }}"
+      admin_username: "{{ admin_username.user_input }}"
+      admin_password: "{{ admin_password.user_input }}"
+      genai_key: "{{ genai_key.user_input }}"

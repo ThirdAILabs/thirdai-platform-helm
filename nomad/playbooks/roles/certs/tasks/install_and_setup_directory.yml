@@ -1,0 +1,81 @@
+---
+- name: Install OpenSSL on the web ingress server
+  block:
+    - name: Install OpenSSL package on Ubuntu
+      ansible.builtin.apt:
+        name: openssl
+        state: present
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+
+    - name: Install OpenSSL package on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: openssl
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+
+    - name: Install OpenSSL package on Amazon Linux 2 using yum (command)
+      ansible.builtin.command: yum install -y openssl
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum
+
+    - name: Fail if OpenSSL installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install OpenSSL on {{ ansible_host }}."
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)
+
+  rescue:
+    - name: Rollback - Remove OpenSSL package if installation failed on Ubuntu
+      ansible.builtin.apt:
+        name: openssl
+        state: absent
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Rollback - Remove OpenSSL package if installation failed on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: openssl
+        state: absent
+      when: ansible_pkg_mgr == "dnf"
+      ignore_errors: true
+
+    - name: Rollback - Remove OpenSSL package if installation failed on Amazon Linux 2
+      ansible.builtin.command: yum remove -y openssl
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Installation of OpenSSL failed and rollback performed on {{ ansible_host }}."
+
+
+- name: Create certificates directory on the web ingress server
+  block:
+    - name: Ensure certificates directory exists
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      register: result_dir
+
+    - name: Fail if directory creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create certificates directory on {{ ansible_host }}. Error: {{ result_dir }}"
+      when: result_dir is failed
+
+  rescue:
+    - name: Rollback - Remove certificates directory if creation failed
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Creation of certificates directory failed and rollback performed on {{ ansible_host }}."

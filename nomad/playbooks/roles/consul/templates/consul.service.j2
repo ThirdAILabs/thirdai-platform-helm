@@ -1,0 +1,13 @@
+[Unit]
+Description=Consul Agent
+After=network.target
+
+[Service]
+ExecStart={{ consul_bin_path }} agent -config-dir=/etc/consul.d
+Restart=on-failure
+User=root
+Group=root
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,61 @@
+---
+- name: Cleanup Local Docker registry (If exists)
+  when: docker_images is defined and docker_images | length > 0
+  block:
+    - name: Stop and remove the Docker registry container
+      community.docker.docker_container:
+        name: "local-docker-registry"
+        state: absent
+
+    - name: List images from the local Docker registry
+      shell: "curl -s http://{{ shared_file_system.private_ip }}:5000/v2/_catalog | jq -r '.repositories[]'"
+      register: registry_images
+      changed_when: false
+
+    - name: List tags for each image in the registry
+      shell: "curl -s http://{{ shared_file_system.private_ip }}:5000/v2/{{ item }}/tags/list | jq -r '.tags[]'"
+      with_items: "{{ registry_images.stdout_lines }}"
+      register: registry_image_tags
+      changed_when: false
+      when: registry_images.stdout_lines | length > 0
+
+    - name: Delete images from the local Docker registry
+      shell: "docker rmi -f {{ item.item }}:{{ tag }}"
+      with_items: "{{ registry_image_tags.results }}"
+      loop_control:
+        loop_var: tag
+      vars:
+        tag: "{{ tag.stdout_lines }}"
+      when: tag | length > 0
+      register: registry_image_removal
+      changed_when: registry_image_removal.rc == 0
+
+    - name: Remove Docker registry data directory
+      ansible.builtin.file:
+        path: "/opt/thirdai_platform/local-registry"
+        state: absent
+
+    - name: Remove Docker registry authentication directory
+      ansible.builtin.file:
+        path: "/opt/thirdai_platform/auth"
+        state: absent
+
+    - name: Remove insecure registry configuration from Docker daemon.json
+      ansible.builtin.file:
+        path: "/etc/docker/daemon.json"
+        state: absent
+
+    - name: Restart Docker service to apply cleanup
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+
+    - name: Log out from the Docker registry
+      shell: "docker logout {{ shared_file_system.private_ip }}:5000"
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+
+    - name: Confirm Docker registry cleanup completion
+      ansible.builtin.debug:
+        msg: "Docker registry setup and images have been successfully cleaned up on {{ ansible_host }}."

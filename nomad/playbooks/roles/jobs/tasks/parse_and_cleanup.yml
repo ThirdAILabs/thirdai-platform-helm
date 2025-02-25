@@ -1,0 +1,315 @@
+---
+- name: Submit Nomad jobs
+  when: ansible_host_private_ip == critical_services_ips[0]
+  block:
+    - name: Slurp HCL files from Nomad server
+      block:
+        - name: Slurp HCL files (Traefik, ModelBazaar, Autoscaler, Keycloak)
+          ansible.builtin.slurp:
+            src: "{{ item }}"
+          loop:
+            - "/tmp/traefik_job.hcl"
+            - "/tmp/model_bazaar_job.hcl"
+            - "/tmp/nomad_autoscaler_job.hcl"
+            - "/tmp/keycloak_job.hcl"
+          register: slurped_files
+
+        - name: Slurp HCL file for ModelBazaar init
+          ansible.builtin.slurp:
+            src: "/tmp/model_bazaar_job_init.hcl"
+          register: slurped_model_bazaar_job_init
+
+        - name: Fail if slurping HCL files failed
+          ansible.builtin.fail:
+            msg: "Failed to slurp HCL files from {{ ansible_host }}. Error: {{ slurped_files }}"
+          when: slurped_files is failed or slurped_model_bazaar_job_init is failed
+
+      rescue:
+        - name: Fail playbook with error (slurp step)
+          ansible.builtin.fail:
+            msg: "Slurping HCL files failed on {{ ansible_host }}."
+
+    - name: Debug JSON to be sent to Nomad
+      ansible.builtin.debug:
+        msg: "{{ {'JobHCL': item.content | b64decode, 'Canonicalize': true} | to_json }}"
+      loop: "{{ slurped_files.results }}"
+
+    - name: Parse Nomad job HCL to JSON
+      block:
+        - name: Parse Nomad job HCL
+          ansible.builtin.uri:
+            url: "http://localhost:4646/v1/jobs/parse"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Nomad-Token: "{{ acl_token.stdout }}"
+            body: "{{ {'JobHCL': item.content | b64decode, 'Canonicalize': true} | to_json }}"
+            body_format: json
+            return_content: true
+          loop: "{{ slurped_files.results }}"
+          register: parsed_jobs
+
+        - name: Parse ModelBazaar (init) HCL
+          ansible.builtin.uri:
+            url: "http://localhost:4646/v1/jobs/parse"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Nomad-Token: "{{ acl_token.stdout }}"
+            body: "{{ {'JobHCL': slurped_model_bazaar_job_init.content | b64decode, 'Canonicalize': true} | to_json }}"
+            body_format: json
+            return_content: true
+          register: parsed_model_bazaar_job_init
+
+        - name: Fail if parsing Nomad job HCL failed
+          ansible.builtin.fail:
+            msg: "Failed to parse Nomad job HCL on {{ ansible_host }}. Error: {{ parsed_jobs }}"
+          when: parsed_jobs is failed or parsed_model_bazaar_job_init is failed
+
+      rescue:
+        - name: Fail playbook with error (parse step)
+          ansible.builtin.fail:
+            msg: "Parsing Nomad job HCL failed on {{ ansible_host }}."
+
+    - name: Submit parsed Nomad jobs to server
+      block:
+        - name: Submit Traefik Nomad job
+          ansible.builtin.uri:
+            url: "http://localhost:4646/v1/jobs"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Nomad-Token: "{{ acl_token.stdout }}"
+            body: "{{ {'Job': item.json} | to_nice_json }}"
+            body_format: json
+            return_content: true
+          loop: "{{ parsed_jobs.results }}"
+          when: item.json is defined and item.json.Name == 'traefik'
+          register: traefik_submission_response
+
+        - name: Fail if submitting Traefik job failed
+          ansible.builtin.fail:
+            msg: "Failed to submit Traefik job on {{ ansible_host }}. Error: {{ traefik_submission_response }}"
+          when: traefik_submission_response is failed
+
+        - name: Keycloak tasks
+          when: cluster_config.login_method == "keycloak"
+          block:
+
+            - name: Submit Keycloak Nomad job
+              ansible.builtin.uri:
+                url: "http://localhost:4646/v1/jobs"
+                method: POST
+                headers:
+                  Content-Type: "application/json"
+                  X-Nomad-Token: "{{ acl_token.stdout }}"
+                body: "{{ {'Job': item.json} | to_nice_json }}"
+                body_format: json
+                return_content: true
+              loop: "{{ parsed_jobs.results }}"
+              when: item.json is defined and item.json.Name == 'keycloak'
+              register: keycloak_submission_response
+
+            - name: Fail if submitting Keycloak job failed
+              ansible.builtin.fail:
+                msg: "Failed to submit Keycloak job on {{ ansible_host }}. Error: {{ keycloak_submission_response }}"
+              when: keycloak_submission_response is failed
+
+            - name: Wait for Keycloak cluster readiness
+              shell: |
+                curl -s -o /dev/null -w "%{http_code}" \
+                  -L -X GET "http://traefik-http.service.consul/keycloak/health/ready"
+              register: keycloak_status
+              retries: 20
+              delay: 10
+              until: keycloak_status.stdout == "200"
+              ignore_errors: true
+
+            - name: Import Docker Container Variables
+              when: keycloak_status.stdout is defined and keycloak_status.stdout == "200"
+              ansible.builtin.include_tasks: "../../postgresql/tasks/install_libraries.yml"
+
+            # Here we handle the DB changes (realm_id, etc.) for Keycloak.
+            - name: Retrieve the realm_id for 'master' realm
+              postgresql_query:
+                db: "{{ keycloak_db_uri_split.path[1:] if not cluster_config.self_hosted_sql_server else 'keycloakdb' }}"
+                query: "SELECT id FROM public.realm WHERE name = 'master';"
+                login_user: "{{ KC_DB_USERNAME }}"
+                login_password: "{{ KC_DB_PASSWORD }}"
+                login_host: "{{ keycloak_db_uri_split.hostname if not cluster_config.self_hosted_sql_server else sql_server.private_ip }}"
+                login_port: "{{ keycloak_db_uri_split.port if not cluster_config.self_hosted_sql_server else 5432 }}"
+              register: realm_id_result
+              ignore_errors: yes
+
+            - name: Set the realm_id as a fact
+              set_fact:
+                master_realm_id: "{{ realm_id_result.query_result[0].id }}"
+              when:
+                - realm_id_result.query_result is defined
+                - realm_id_result.query_result | length > 0
+
+            - name: Update frontendUrl for master realm
+              postgresql_query:
+                db: "{{ keycloak_db_uri_split.path[1:] if not cluster_config.self_hosted_sql_server else 'keycloakdb' }}"
+                query: >
+                  INSERT INTO public.realm_attribute (realm_id, name, value)
+                  VALUES ('{{ master_realm_id }}', 'frontendUrl', 'https://localhost/keycloak/')
+                  ON CONFLICT (realm_id, name)
+                  DO UPDATE SET value = EXCLUDED.value;
+                login_user: "{{ KC_DB_USERNAME }}"
+                login_password: "{{ KC_DB_PASSWORD }}"
+                login_host: "{{ keycloak_db_uri_split.hostname if not cluster_config.self_hosted_sql_server else sql_server.private_ip }}"
+                login_port: "{{ keycloak_db_uri_split.port if not cluster_config.self_hosted_sql_server else 5432 }}"
+              register: update_frontendurl
+              ignore_errors: yes
+              when: master_realm_id is defined
+
+            - name: Warn if Keycloak was not updated properly
+              debug:
+                msg: >
+                  {% if keycloak_status.stdout != "200" %}
+                  **Keycloak was not ready.**
+                  {% elif realm_id_result.failed or master_realm_id is not defined %}
+                  **Failed to retrieve the realm_id for the 'master' realm.**
+                  {% elif update_frontendurl.failed %}
+                  **The frontendUrl could not be updated automatically.**
+                  {% endif %}
+                  
+                  You must configure the frontendUrl manually by following these steps:
+                  
+                  1. **SSH Tunnel:**
+                    ```bash
+                    sudo ssh -i <public-key> -L 443:<PRIVATE_IP_OF_MACHINE>:443 <USERNAME>@<NEW_PUBLIC_IP>
+                    ```
+                  
+                  2. **Access Keycloak:**
+                    https://localhost/keycloak
+                  
+                  3. **Configure Frontend URL:**
+                    - Log in as admin, navigate to **Realm Settings** > **General**.
+                    - Set **Frontend URL** to `https://localhost/keycloak/`.
+              when: keycloak_status.stdout != "200"
+                    or realm_id_result.failed
+                    or master_realm_id is not defined
+                    or update_frontendurl.failed
+
+            # Here, we purge the Keycloak job and re-submit so Keycloak sees DB changes
+            - name: Purge Keycloak Nomad job
+              ansible.builtin.uri:
+                url: "http://localhost:4646/v1/job/keycloak?purge=true"
+                method: DELETE
+                headers:
+                  X-Nomad-Token: "{{ acl_token.stdout }}"
+                return_content: true
+              register: purge_keycloak_job
+              ignore_errors: yes
+
+            - name: Re-submit Keycloak Nomad job (after DB fix)
+              ansible.builtin.uri:
+                url: "http://localhost:4646/v1/jobs"
+                method: POST
+                headers:
+                  Content-Type: "application/json"
+                  X-Nomad-Token: "{{ acl_token.stdout }}"
+                body: "{{ {'Job': item.json} | to_nice_json }}"
+                body_format: json
+                return_content: true
+              loop: "{{ parsed_jobs.results }}"
+              when: item.json is defined and item.json.Name == 'keycloak'
+              register: keycloak_submission_response
+
+            - name: Fail if re-submitting Keycloak job failed
+              ansible.builtin.fail:
+                msg: "Failed to re-submit Keycloak job on {{ ansible_host }}. Error: {{ keycloak_submission_response }}"
+              when: keycloak_submission_response is failed
+
+            - name: Wait for Keycloak cluster readiness (2nd time)
+              shell: |
+                curl -s -o /dev/null -w "%{http_code}" \
+                  -L -X GET "http://traefik-http.service.consul/keycloak/health/ready"
+              register: keycloak_status
+              retries: 20
+              delay: 10
+              until: keycloak_status.stdout == "200"
+              ignore_errors: true
+
+          rescue:
+            - name: Fail playbook with error (Keycloak block)
+              ansible.builtin.fail:
+                msg: "Submitting or configuring Keycloak job failed on {{ ansible_host }}."
+
+
+        - name: Submit single-allocation ModelBazaar job
+          ansible.builtin.uri:
+            url: "http://localhost:4646/v1/jobs"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Nomad-Token: "{{ acl_token.stdout }}"
+            body_format: json
+            body: "{{ {'Job': parsed_model_bazaar_job_init.json} | to_nice_json }}"
+            return_content: true
+          register: single_allocation_submission
+
+        - name: Fail if submitting single-allocation ModelBazaar job failed
+          ansible.builtin.fail:
+            msg: "Failed to submit single-allocation ModelBazaar job on {{ ansible_host }}. Error: {{ single_allocation_submission.content }}"
+          when: single_allocation_submission.status >= 400
+
+        - name: Wait for ModelBazaar to become ready
+          ansible.builtin.uri:
+            url: "http://traefik-http.service.consul/api/health"
+            method: GET
+          register: modelbazaar_status
+          retries: 30
+          delay: 20
+          until: modelbazaar_status.status == 200
+          ignore_errors: false
+
+        - name: Submit remaining Nomad jobs
+          ansible.builtin.uri:
+            url: "http://localhost:4646/v1/jobs"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Nomad-Token: "{{ acl_token.stdout }}"
+            body: "{{ {'Job': item.json} | to_nice_json }}"
+            body_format: json
+            return_content: true
+          loop: "{{ parsed_jobs.results }}"
+          when: item.json is defined and item.json.Name not in ['traefik','keycloak']
+          register: job_submission_responses
+
+        - name: Fail if submitting remaining Nomad jobs failed
+          ansible.builtin.fail:
+            msg: "Failed to submit a Nomad job on {{ ansible_host }}. Error: {{ job_submission_responses }}"
+          when: job_submission_responses is failed
+
+      rescue:
+        - name: Fail playbook with error (Nomad submission block)
+          ansible.builtin.fail:
+            msg: "Submitting Nomad jobs failed on {{ ansible_host }}."
+
+
+    - name: Cleanup temporary HCL files
+      block:
+        - name: Remove the HCL files in /tmp
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "/tmp/traefik_job.hcl"
+            - "/tmp/model_bazaar_job.hcl"
+            - "/tmp/nomad_autoscaler_job.hcl"
+            - "/tmp/keycloak_job.hcl"
+          register: cleanup_result
+
+        - name: Fail if cleaning up HCL files failed
+          ansible.builtin.fail:
+            msg: "Failed to cleanup temporary HCL files on {{ ansible_host }}. Error: {{ cleanup_result }}"
+          when: cleanup_result is failed
+
+      rescue:
+        - name: Fail playbook with error (cleanup step)
+          ansible.builtin.fail:
+            msg: "Cleanup of temporary HCL files failed on {{ ansible_host }}."

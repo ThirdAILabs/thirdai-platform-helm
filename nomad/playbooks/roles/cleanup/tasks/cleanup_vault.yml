@@ -1,0 +1,42 @@
+---
+- name: Cleaning Vault
+  when: ansible_host_private_ip in critical_services_ips
+  block:
+  - name: Gather facts about running services
+    ansible.builtin.service_facts:
+
+  - name: Delete Vault opt directory
+    ansible.builtin.file:
+      path: "/opt/vault"
+      state: absent
+    ignore_errors: true
+    tags: cleanup
+
+  - name: Delete Vault etc directory
+    ansible.builtin.file:
+      path: "/etc/vault.d"
+      state: absent
+    ignore_errors: true
+    tags: cleanup
+
+  - name: Stop and disable Vault and related services
+    ansible.builtin.systemd:
+      name: vault
+      state: stopped
+      enabled: no
+    ignore_errors: true
+
+  - name: Remove Vault systemd service file
+    ansible.builtin.file:
+      path: /etc/systemd/system/vault.service
+      state: absent
+  
+  - name: Remove the 'vault' user
+    ansible.builtin.user:
+      name: vault
+      state: absent
+      remove: true
+
+  - name: Confirm Vault cleanup completion
+    ansible.builtin.debug:
+      msg: Vault has been successfully cleaned up on {{ ansible_host }}."

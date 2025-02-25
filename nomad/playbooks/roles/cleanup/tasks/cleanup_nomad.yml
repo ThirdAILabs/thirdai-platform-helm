@@ -1,0 +1,44 @@
+---
+- name: Gather facts about running services
+  ansible.builtin.service_facts:
+
+- name: Delete Nomad Client data directory
+  ansible.builtin.file:
+    path: "/opt/nomad/data/client"
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Delete Nomad Server data directory
+  ansible.builtin.file:
+    path: "/opt/nomad/data/server"
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Stop and disable Nomad and related services
+  ansible.builtin.systemd:
+    name: nomad
+    state: stopped
+    enabled: no
+  ignore_errors: true
+
+- name: Remove Nomad configuration and data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/thirdai_platform/nomad_data
+    - /var/lib/nomad
+    - /opt/thirdai_platform/nomad
+  ignore_errors: true
+  become: true
+
+- name: Remove Nomad systemd service file
+  ansible.builtin.file:
+    path: /etc/systemd/system/nomad.service
+    state: absent
+
+- name: Confirm Nomad and related services cleanup completion
+  ansible.builtin.debug:
+    msg: "Nomad, Nomad-autoscaler, Traefik, and related files have been successfully cleaned up on {{ ansible_host }}."

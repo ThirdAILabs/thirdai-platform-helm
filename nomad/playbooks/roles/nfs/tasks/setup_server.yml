@@ -1,0 +1,114 @@
+---
+- name: Debug - Print values for NFS directory creation
+  ansible.builtin.debug:
+    msg: "ansible_host: {{ ansible_host }}, shared_file_system.private_ip: {{ shared_file_system.private_ip }}"
+
+- name: Create NFS directories
+  block:
+    - name: Create NFS directories and set permissions
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/{{ item.path }}"
+        state: directory
+        mode: "{{ item.mode }}"
+        owner: root
+        group: nomad_nfs
+      loop:
+        - { path: "", mode: "0774" }
+        - { path: "license", mode: "0774" }
+        - { path: "models", mode: "0774" }
+        - { path: "data", mode: "0774" }
+        - { path: "users", mode: "0774" }
+        - { path: "nomad-monitoring/nomad_nodes", mode: "0774" }
+        - { path: "nomad-monitoring/victoriametric", mode: "0774" }
+        - { path: "nomad-monitoring/grafana", mode: "0774" }
+        - { path: "pretrained-models", mode: "0774" }
+        - { path: "keycloak-themes", mode: "0774" }
+      register: result
+
+    - name: Fail if directory creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create NFS directories on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+    - name: Set group sticky bit on NFS shared directories
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/{{ item }}"
+        mode: g+s
+        owner: root
+        group: nomad_nfs
+        recurse: yes
+      loop:
+        - license
+        - models
+        - data
+        - users
+        - nomad-monitoring
+        - pretrained-models
+      register: result
+
+    - name: Fail if setting sticky bit failed
+      ansible.builtin.fail:
+        msg: "Failed to set sticky bit on NFS directories on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove created directories on failure
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - license
+        - models
+        - data
+        - users
+        - pretrained-models
+        - nomad-monitoring
+        - keycloak-themes
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "NFS directory creation or sticky bit setting failed on {{ ansible_host }}. Rollback performed."
+
+- name: Create the prometheus node file
+  block:
+    - name: Dump the nomad server node information in the file
+      ansible.builtin.copy:
+        dest: "{{ shared_file_system.shared_dir }}/nomad-monitoring/nomad_nodes/server.yaml"
+        content: |
+          {% set structured_data = [
+            {
+              'targets': [shared_file_system.private_ip ~ ':4646'],
+              'labels': {
+                'nomad_node': 'server'
+              }
+            }
+          ] -%}
+
+          {{- structured_data | to_yaml() }}
+        owner: "root"
+        group: nomad_nfs
+        mode: "0755"
+      register: result
+    
+    - name: Fail if creating prometheus node file failed
+      ansible.builtin.fail:
+        msg: "Failed to create the telemetry node file on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+    - name: Dump the nomad client node information in the file
+      when: nfs_clients | length > 0
+      ansible.builtin.copy:
+        dest: "{{ shared_file_system.shared_dir }}/nomad-monitoring/nomad_nodes/client.yaml"
+        content: |
+          {% set targets = nfs_clients | map(attribute='private_ip') | map('regex_replace', '^(.+)$', '\\1:4646') | list -%}
+          {{- [{"targets": targets}] | to_yaml() }}
+        owner: "root"
+        group: nomad_nfs
+        mode: "0755"
+      register: result
+    
+    - name: Fail if creating prometheus node file failed
+      ansible.builtin.fail:
+        msg: "Failed to create the telemetry node file on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed

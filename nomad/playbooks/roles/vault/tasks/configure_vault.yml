@@ -1,0 +1,134 @@
+---
+- name: Configure and Start Vault Server
+  when: ansible_host_private_ip in critical_services_ips
+  block:
+    - name: Add the system user 'vault'
+      user:
+        name: vault
+        home: /etc/vault.d
+        shell: /bin/false
+        system: yes
+
+    - name: Create configuration directory
+      file:
+        path: /etc/vault.d/
+        state: directory
+        recurse: yes
+        owner: vault
+        group: vault
+
+    - name: Create storage directory
+      file:
+        path: /opt/vault/data
+        state: directory
+        recurse: yes
+        owner: vault
+        group: vault
+
+    - name: Ensure the /etc/vault.d directory exists
+      file:
+        path: /etc/vault.d
+        state: directory
+        owner: vault
+        group: vault
+        mode: "0755"
+
+    - name: Template Vault configuration
+      template:
+        src: vault.hcl.j2
+        dest: /etc/vault.d/vault.hcl
+        owner: vault
+        group: vault
+        mode: '0644'
+      vars:
+        node_id: "{{ node_name }}"
+
+    - name: Create vault.env file
+      file:
+        path: /etc/vault.d/vault.env
+        state: touch
+        owner: vault
+        group: vault
+    
+    - name: Find vault binary path
+      ansible.builtin.command: which vault
+      register: vault_binary_path
+    
+    - name: Set default vault binary path if not found
+      ansible.builtin.set_fact:
+        vault_binary: "{{ vault_binary_path.stdout | default('/usr/local/bin/vault') }}"
+
+    # For AL2, `sudo systemd-analyze verify /etc/systemd/system/vault.service` parse the vault service file and reports few issues. Look into: https://support.hashicorp.com/hc/en-us/articles/4406120244755-Unknown-lvalue-StartLimitIntervalSec-in-section-Service
+    - name: Install vault systemd service
+      ansible.builtin.template:
+        src: templates/vault.service.j2
+        dest: /etc/systemd/system/vault.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start and enable Vault service
+      ansible.builtin.systemd:
+        name: vault
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for Vault to be available
+      wait_for:
+        host: "{{ ansible_host_private_ip }}"
+        port: 8200
+        delay: 10
+        timeout: 300
+
+    - name: Check Vault status
+      command: "vault status -address=http://127.0.0.1:8200 -format=json"
+      register: vault_status
+      failed_when: vault_status.rc not in [0, 2]
+
+    - name: Set fact for Vault initialization status
+      set_fact:
+        vault_initialized: "{{ vault_status.stdout | from_json | json_query('initialized') }}"
+
+    - name: Configure and Start Vault Server
+      when: ansible_host_private_ip == critical_services_ips[0]
+      block:
+        - name: Set fact for Vault initialization status
+          set_fact:
+            vault_initialized: "{{ vault_status.stdout | from_json | json_query('initialized') }}"
+
+        - name: Initialize Vault if not already initialized
+          when: 'not vault_initialized'
+          shell: sudo vault operator init -key-shares=1 -key-threshold=1 -format=json -address=http://127.0.0.1:8200 | sudo tee /opt/vault/init-output.json
+          register: vault_init
+
+        - name: Load Vault initialization data from disk
+          slurp:
+            src: /opt/vault/init-output.json
+          register: vault_init_file
+
+        - name: Parse Vault initialization JSON
+          set_fact:
+            vault_init_data: "{{ vault_init_file.content | b64decode | from_json }}"
+
+    - name: Get name of the node with matching private_ip
+      set_fact:
+        vault_server_name: "{{ cluster_config.nodes 
+                      | selectattr('private_ip', 'match', '^' + critical_services_ips[0] + '$') 
+                      | map(attribute='name') 
+                      | first }}"
+
+    - name: Distribute vault_init_data to all hosts
+      set_fact:
+        vault_init_data: "{{ hostvars[vault_server_name].vault_init_data }}"
+
+    - name: Show vault_init_data
+      debug:
+        var: vault_init_data
+
+    - name: Write vault_init_data JSON to file on follower vault servers
+      when: ansible_host_private_ip != critical_services_ips[0]
+      copy:
+        content: "{{ vault_init_data | to_nice_json }}"
+        dest: /opt/vault/init-output.json
+        mode: '0600'

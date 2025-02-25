@@ -1,0 +1,154 @@
+---
+- name: Copy model file to the appropriate directory
+  block:
+    - name: Set fact to determine if cluster endpoint is a domain or an IP
+      set_fact:
+        is_domain: "{{ (cluster_config.cluster_endpoint is search('^([a-zA-Z]+[a-zA-Z0-9.-]+)$')) | bool }}"
+
+    - name: Generate SSL certificate using OpenSSL
+      block:
+        - name: Generate SSL certificate with -addext flag for OpenSSL >= 1.1.1
+          when: ansible_distribution != 'Amazon' or ansible_distribution_major_version != "2"
+          ansible.builtin.shell: >
+            sudo openssl req -x509 -newkey rsa:4096 -keyout traefik.key
+            -out traefik.crt -days 365 -nodes
+            -subj "/CN=THIRDAI PLATFORM CERT"
+            -addext "subjectAltName = {{ 'DNS:' if is_domain else 'IP:' }}{{ cluster_config.cluster_endpoint }}, IP:{{ critical_services_ips[0] }}, DNS:*.service.consul"
+          args:
+            chdir: "{{ shared_file_system.shared_dir }}/certs"
+            creates: "{{ shared_file_system.shared_dir }}/certs/traefik.crt"
+          register: result
+
+        - name: Generate SSL certificate with config file for OpenSSL < 1.1.1
+          when:
+            - ansible_distribution == 'Amazon'
+            - ansible_distribution_major_version == "2"
+          block:
+            - name: Create OpenSSL config file with subjectAltName
+              ansible.builtin.copy:
+                content: |
+                  [req]
+                  distinguished_name = req_distinguished_name
+                  req_extensions = v3_req
+                  [req_distinguished_name]
+                  [v3_req]
+                  subjectAltName = {{ 'DNS:' if is_domain else 'IP:' }}{{ cluster_config.cluster_endpoint }}, IP:{{ critical_services_ips[0] }}, DNS:*.service.consul"
+                dest: "{{ shared_file_system.shared_dir }}/certs/openssl.cnf"
+                owner: "{{ ansible_user }}"
+                group: "{{ ansible_user }}"
+                mode: "0644"
+
+            - name: Generate SSL certificate using config file
+              ansible.builtin.shell: >
+                sudo openssl req -x509 -newkey rsa:4096 -keyout traefik.key
+                -out traefik.crt -days 365 -nodes
+                -subj "/CN=THIRDAI PLATFORM CERT"
+                -config openssl.cnf -extensions v3_req
+              args:
+                chdir: "{{ shared_file_system.shared_dir }}/certs"
+                creates: "{{ shared_file_system.shared_dir }}/certs/traefik.crt"
+              register: result
+
+        - name: Ensure correct permissions for traefik.crt and traefik.key
+          file:
+            path: "{{ shared_file_system.shared_dir }}/certs/{{ item }}"
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+            mode: "0644"
+          loop:
+            - traefik.crt
+            - traefik.key
+          become: true
+
+    - name: Fail if SSL certificate generation failed
+      ansible.builtin.fail:
+        msg: "Failed to generate SSL certificate on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove generated SSL certificate and key
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs/traefik.crt"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove generated SSL key
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs/traefik.key"
+        state: absent
+      ignore_errors: true
+
+    - name: Remove generated OpenSSL config file
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs/openssl.cnf"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "SSL certificate generation failed and rollback performed on {{ ansible_host }}."
+
+- name: Create certificates.toml file
+  block:
+    - name: Create certificates.toml configuration file
+      ansible.builtin.copy:
+        content: |
+          [tls.stores]
+            [tls.stores.default]
+              [tls.stores.default.defaultCertificate]
+                certFile = "/certs/traefik.crt"
+                keyFile = "/certs/traefik.key"
+          [http]
+            [http.routers]
+              [http.routers.nomad]
+                rule = "PathPrefix(`/ui`) || PathPrefix(`/v1`)"
+                service = "nomad"
+                [http.routers.nomad.middlewares]
+                  headers = "nomad-headers"
+            [http.services]
+              [http.services.nomad]
+                [http.services.nomad.loadBalancer]
+                  passHostHeader = true
+                  [[http.services.nomad.loadBalancer.servers]]
+                    url = "http://172.17.0.1:4646"
+            [http.middlewares]
+              [http.middlewares.nomad-headers]
+                [http.middlewares.nomad-headers.headers]
+                  hostsProxyHeaders = ["X-Forwarded-For"]
+          [tcp]
+            [tcp.routers]
+              [tcp.routers.nomad-ws]
+                entryPoints = ["websecure"]
+                rule = "HostSNI(`*`)"
+                service = "nomad-ws"
+            [tcp.services]
+              [tcp.services.nomad-ws]
+                [tcp.services.nomad-ws.loadBalancer]
+                  [[tcp.services.nomad-ws.loadBalancer.servers]]
+                    address = "172.17.0.1:4646"
+          [websocket]
+            [websocket.middlewares]
+              [websocket.middlewares.nomad-ws]
+                [websocket.middlewares.nomad-ws.headers]
+                  customRequestHeaders = {"Origin" = "${scheme}://${host}"}
+        dest: "{{ shared_file_system.shared_dir }}/certs/certificates.toml"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+      register: result
+
+    - name: Fail if certificates.toml creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create certificates.toml file on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove certificates.toml file if creation failed
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/certs/certificates.toml"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Creation of certificates.toml file failed and rollback performed on {{ ansible_host }}."

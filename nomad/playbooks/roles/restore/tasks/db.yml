@@ -1,0 +1,142 @@
+---
+# Ensure PostgreSQL client tools and psycopg2 are installed
+- name: Ensure PostgreSQL client tools and psycopg2 are installed on Debian-based systems
+  when: ansible_pkg_mgr == "apt"
+  block:
+    - name: Install PostgreSQL client tools (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: postgresql-client
+        state: present
+
+    - name: Install psycopg2 for PostgreSQL operations (Debian/Ubuntu)
+      ansible.builtin.package:
+        name: python3-psycopg2
+        state: present
+
+- name: Ensure PostgreSQL client tools and psycopg2 are installed on Amazon Linux 2023
+  when: ansible_distribution == "Amazon" and ansible_pkg_mgr == "dnf"
+  block:
+    - name: Install PostgreSQL client tools and psycopg2 (Amazon Linux 2023)
+      ansible.builtin.dnf:
+        name:
+          - postgresql15
+          - python3-psycopg2
+        state: present
+
+- name: Ensure PostgreSQL client tools and psycopg2 are installed on Amazon Linux 2
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+  become: true
+  block:
+    - name: Enable PostgreSQL 14 repository on Amazon Linux 2
+      ansible.builtin.shell: |
+        amazon-linux-extras enable postgresql14
+
+    - name: Install PostgreSQL client tools on Amazon Linux 2
+      ansible.builtin.command: yum install -y postgresql
+
+    - name: Install psycopg2 for PostgreSQL operations on Amazon Linux 2
+      ansible.builtin.pip:
+        name: psycopg2-binary
+        state: present
+
+# Case 1: Set SQL URI for self-hosted SQL server
+- name: Set SQL URI for self-hosted SQL server
+  set_fact:
+    sql_uri: "postgresql://{{ sql_server.username }}:{{ sql_server.database_password }}@{{ sql_server.private_ip }}:5432/modelbazaar"
+  when: cluster_config.self_hosted_sql_server
+
+# Case 2: Set SQL URI from environment if sql_uri is "ENV"
+- name: Set SQL URI from environment if sql_uri is "ENV"
+  set_fact:
+    sql_uri: "postgresql://{{ lookup('env', 'DB_USERNAME') }}:{{ lookup('env', 'DB_PASSWORD') }}@{{ lookup('env', 'DB_HOSTNAME') }}:5432/{{ lookup('env', 'DB_NAME') }}"
+  when:
+    - sql_uri == "ENV"
+
+# Case 3: If sql_uri is already a direct URI, keep it as-is
+- name: Ensure direct SQL URI is used
+  set_fact:
+    sql_uri: "{{ sql_uri }}"
+  when:
+    - sql_uri is defined
+    - sql_uri != "ENV"
+    - not cluster_config.self_hosted_sql_server
+
+# Split the SQL URI into components for all cases
+- name: Parse the SQL URI into components
+  set_fact:
+    db_user: "{{ sql_uri.split('//')[1].split(':')[0] }}"
+    db_password: "{{ sql_uri.split('//')[1].split(':')[1].split('@')[0] }}"
+    db_host: "{{ sql_uri.split('@')[1].split(':')[0] }}"
+    db_port: 5432
+    db_name: "{{ sql_uri.split('//')[1].split('/')[1] }}"
+  when: sql_uri is defined
+
+# Debug output to print the split SQL connection details
+- name: Print SQL connection details
+  debug:
+    msg:
+      - "Final SQL URI: {{ sql_uri }}"
+      - "Database User: {{ db_user }}"
+      - "Database Password: {{ db_password }}"
+      - "Database Host: {{ db_host }}"
+      - "Database Port: {{ db_port }}"
+      - "Database Name: {{ db_name }}"
+
+# Restore PostgreSQL database using the parsed connection parameters
+- name: Restore PostgreSQL database using parsed connection parameters
+  when:
+    - db_user is defined
+    - db_password is defined
+    - db_host is defined
+    - db_port is defined
+    - db_name is defined
+  block:
+    - name: Restore PostgreSQL database from dump
+      community.postgresql.postgresql_db:
+        name: "{{ db_name }}"
+        state: restore
+        target: "/tmp/extracted_backup/db_backup.sql"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        port: "{{ db_port }}"
+      register: restore_db_result
+
+    - name: Fail if database restoration failed
+      ansible.builtin.fail:
+        msg: "Failed to restore the database {{ db_name }} on host {{ db_host }}. Error: {{ restore_db_result }}"
+      when: restore_db_result is failed
+
+  rescue:
+    - name: Log restoration failure
+      ansible.builtin.debug:
+        msg: "Database restoration failed for {{ db_name }} on host {{ db_host }}. Rolling back."
+
+    - name: Delete the restored database if restoration failed
+      community.postgresql.postgresql_db:
+        name: "{{ db_name }}"
+        state: absent
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        port: "{{ db_port }}"
+      ignore_errors: true
+
+    - name: Fail playbook with restoration error message
+      ansible.builtin.fail:
+        msg: "Restoration failed and rollback performed for the database {{ db_name }}."
+
+- name: Ensure cleanup of the temporary extraction directory
+  when: ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Cleanup temporary extraction directory
+      ansible.builtin.file:
+        path: "/tmp/extracted_backup"
+        state: absent
+      register: cleanup
+      failed_when: cleanup is failed
+
+  rescue:
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Cleanup of temporary extraction directory failed on {{ ansible_host }}."

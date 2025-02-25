@@ -1,0 +1,26 @@
+---
+- name: Grant access of nfs directory to the new clients
+  block:
+    - name: Configure /etc/exports for NFS clients
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        line: "{{ shared_file_system.shared_dir }} {{ item.private_ip }}(rw,sync,no_subtree_check,all_squash,anonuid=0,anongid=4646)"
+        create: true
+        mode: "0644"
+      loop: "{{ nfs_clients }}"
+      register: result_exports
+
+    - name: Fail if configuring /etc/exports failed
+      ansible.builtin.fail:
+        msg: "Failed to configure /etc/exports for NFS clients on {{ ansible_host }}. Error: {{ result_exports }}"
+      when: result_exports is failed
+    
+    - name: Apply NFS export configuration
+      ansible.builtin.command: exportfs -ra
+      changed_when: false
+      register: result_exportfs
+
+    - name: Fail if applying NFS export configuration failed
+      ansible.builtin.fail:
+        msg: "Failed to apply NFS export configuration on {{ ansible_host }}. Error: {{ result_exportfs }}"
+      when: result_exportfs is failed

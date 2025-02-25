@@ -1,0 +1,115 @@
+---
+- name: Retrieve the Nomad ACL token
+  when: ansible_host_private_ip == critical_services_ips[0]
+  block:
+    - name: Retrieve the Nomad ACL token
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep 'Secret ID' "/opt/thirdai_platform/nomad_data/task_runner_token.txt" | awk '{print $NF}'
+      register: acl_token
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Fail if ACL token retrieval failed
+      ansible.builtin.fail:
+        msg: "Failed to retrieve Nomad ACL token on {{ ansible_host }}. Error: {{ acl_token }}"
+      when: acl_token is failed
+
+  rescue:
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Retrieving Nomad ACL token failed on {{ ansible_host }}."
+
+- name: Calculate the majority count without using 'ceil'
+  set_fact:
+    majority_server_nodes: "{{ (( critical_services_ips | length  + 1) // 2) }}"
+
+- name: Determine nomad-fact for the host
+  block:
+    - name: Determine node pool and class
+      ansible.builtin.set_fact:
+        node_pool: >-
+          {% if current_node_info.is_critical_services_node and not current_node_info.should_run_jobs %}critical_services{% else %}default{% endif %}
+        node_class: "{{ 'critical_services' if current_node_info.is_critical_services_node else 'default' }}"
+
+    - name: Fail if setting node pool and class failed
+      ansible.builtin.fail:
+        msg: "Failed to determine node pool and class on {{ ansible_host }}."
+      when: node_pool is not defined or node_class is not defined
+
+  rescue:
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Determining node pool and class failed on {{ ansible_host }}."
+
+- name: Split the keycloak db uri
+  when: not cluster_config.self_hosted_sql_server
+  ansible.builtin.set_fact:
+    keycloak_db_uri_split: "{{ cluster_config.external_keycloak_db_uri | urlsplit }}"
+
+- name: Gather and set common variables on host
+  block:
+    - name: Set common variables
+      ansible.builtin.set_fact:
+        PRIVATE_SERVER_IP: "{{ critical_services_ips[0] }}"
+        NODE_POOL: "{{ node_pool }}"
+        SHARE_DIR: "{{ shared_file_system.shared_dir }}"
+        PUBLIC_SERVER_IP: "{{ cluster_config.cluster_endpoint }}"
+        JWT_SECRET: "{{ cluster_config.jwt_secret }}"
+        ADMIN_USERNAME: "{{ admin_username }}"
+        ADMIN_MAIL: "{{ admin_mail }}"
+        ADMIN_PASSWORD: "{{ admin_password }}"
+        AUTOSCALING_ENABLED: "{{ cluster_config.autoscaling_enabled }}"
+        AUTOSCALER_MAX_COUNT: "{{ cluster_config.autoscaler_max_count }}"
+        GENAI_KEY: "{{ genai_key }}"
+        DOCKER_REGISTRY_NAME: "{{ docker_registry_name }}"
+        DOCKER_REGISTRY_USERNAME: "{{ docker_registry_username }}"
+        DOCKER_REGISTRY_PASSWORD: "{{ docker_registry_password }}"
+        THIRDAI_PLATFORM_VERSION: "{{ thirdai_platform_version }}"
+        PLATFORM_IMAGE_BRANCH: "{{ platform_image_branch }}"
+        USE_LOCAL_REGISTRY: "{{ (docker_images is defined) and (docker_images | length > 0) }}"
+        KC_DB: >-
+          {{ 
+            'postgres' if cluster_config.self_hosted_sql_server 
+            else ('postgres' if keycloak_db_uri_split.scheme == 'postgresql' 
+            else keycloak_db_uri_split.scheme)
+          }}
+        KC_DB_URL: >-
+          {{
+            'jdbc:' + (
+              'postgresql://' + sql_server.private_ip + ':5432/keycloakdb'
+              if cluster_config.self_hosted_sql_server
+              else
+                  keycloak_db_uri_split.scheme +
+                  '://' +  
+                  keycloak_db_uri_split.hostname + 
+                  ':' + 
+                  (keycloak_db_uri_split.port | string) + 
+                  '/' + 
+                  keycloak_db_uri_split.path[1:] + 
+                  (('?' + keycloak_db_uri_split.query) if keycloak_db_uri_split.query | length != 0 else '')
+            )
+          }}
+        KC_DB_USERNAME: "{{ sql_server.username if cluster_config.self_hosted_sql_server else keycloak_db_uri_split.username }}"
+        KC_DB_PASSWORD: "{{ sql_server.database_password if cluster_config.self_hosted_sql_server else keycloak_db_uri_split.password }}"
+        IDENTITY_PROVIDER: "{{ cluster_config.login_method }}"
+        # the '/' in the end must be present due to issue in python-keycloak
+        # https://github.com/marcospereirampj/python-keycloak/issues/591#issuecomment-2385413111
+        KEYCLOAK_SERVER_URL: "{{ 'https://traefik-https.service.consul/keycloak/' if cluster_config.login_method == 'keycloak' else 'False' }}"
+        PUBLIC_KEYCLOAK_SERVER_URL: "{{ 'https://' + cluster_config.cluster_endpoint + '/keycloak/' if cluster_config.login_method == 'keycloak' else 'False' }}"
+        USE_SSL_IN_LOGIN: "{{ 'True' if cluster_config.login_method == 'keycloak' else 'False' }}"
+        AIRGAPPED: "{{ airgapped | default(false) }}"
+        NUM_CRITICAL_SERVICES_NODES: "{{ critical_services_ips | length }}"
+
+      register: result
+
+    - name: Fail if setting common variables failed
+      ansible.builtin.fail:
+        msg: "Failed to set common variables on localhost. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Setting common variables failed on localhost."

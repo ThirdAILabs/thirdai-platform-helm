@@ -1,0 +1,80 @@
+---
+- name: Set up PostgreSQL if self-hosted
+  block:
+    - name: Ensure postgres group exists
+      block:
+        - name: Create postgres group
+          ansible.builtin.group:
+            name: postgres
+            state: present
+          register: result
+
+        - name: Fail if postgres group creation failed
+          ansible.builtin.fail:
+            msg: "Failed to create postgres group on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+      rescue:
+        - name: Rollback - Remove postgres group on failure
+          ansible.builtin.group:
+            name: postgres
+            state: absent
+          ignore_errors: true
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Creation of postgres group failed and rollback performed on {{ ansible_host }}."
+
+    - name: Ensure postgres user exists and add to docker group
+      block:
+        - name: Create postgres user and add to docker group
+          ansible.builtin.user:
+            name: postgres
+            group: postgres
+            groups: docker
+            append: yes
+            state: present
+          register: result
+
+        - name: Fail if postgres user creation failed
+          ansible.builtin.fail:
+            msg: "Failed to create postgres user on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+      rescue:
+        - name: Rollback - Remove postgres user on failure
+          ansible.builtin.user:
+            name: postgres
+            state: absent
+          ignore_errors: true
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Creation of postgres user failed and rollback performed on {{ ansible_host }}."
+
+    - name: Create necessary directories on SQL server
+      block:
+        - name: Create directories for PostgreSQL
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            state: directory
+            mode: "{{ item.mode }}"
+            owner: postgres
+            group: postgres
+          loop:
+            - { path: "{{ sql_server.database_dir }}/docker-postgres-init", mode: "0755" }
+            - { path: "{{ sql_server.database_dir }}/data", mode: "0644" }
+          register: result
+
+        - name: Fail if directory creation failed
+          ansible.builtin.fail:
+            msg: "Failed to create directories on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+      rescue:
+        - name: Rollback - Remove created directories on failure
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - "{{ sql_server.database_dir }}/docker-postgres-init"
+            - "{{ sql_server.database_dir }}/data"
+          ignore_errors: true
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Directory creation failed and rollback performed on {{ ansible_host }}."

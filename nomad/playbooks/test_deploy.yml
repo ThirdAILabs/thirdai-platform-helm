@@ -1,0 +1,58 @@
+---
+- name: Deploy ThirdAI Enterprise
+  hosts: localhost
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Load variables from external file
+      include_vars: 
+        file: "{{ config_path }}"
+        name: cluster_config
+    
+    - name: Secret lookup and validation 
+      include_tasks: secret_lookup/main.yml
+      no_log: true
+  
+    - name: Validate configuration file
+      include_tasks: validate_config/validate_cluster_config.yml
+    
+    - name: Set model_folder variable
+      ansible.builtin.set_fact:
+        model_folder: "{{ model_folder | default('') }}"
+
+    - name: Initialize environment for deployment
+      include_tasks: initialize_environment.yml
+      vars:
+        nodes: "{{ cluster_config.nodes }}"
+
+- name: Execute Roles on Remote Hosts
+  hosts: all
+  gather_facts: true
+  become: true
+  any_errors_fatal: true # Would stop executing the play on all hosts, if any tasks fails on one of the host
+
+  pre_tasks:
+    - name: Load the cluster config
+      include_vars:
+        file: "{{ config_path }}"
+        name: cluster_config
+      
+    - name: Set up shared_file_system, critical_services_ips, sql_server, nfs_clients, and sql_clients variables
+      include_tasks: setup_roles/setup_cluster_roles.yml
+
+
+  roles:
+    - validation
+    - nfs
+    - license
+    - { role: models, when: model_folder is defined and model_folder | length > 0 }
+    - consul
+    - { role: vault, when: ansible_host_private_ip in critical_services_ips}
+    - nomad
+    - postgresql
+    - certs
+    - docker_registry
+    - { role: restore, when: restore_path is defined and restore_path != "" }
+    - jobs
+

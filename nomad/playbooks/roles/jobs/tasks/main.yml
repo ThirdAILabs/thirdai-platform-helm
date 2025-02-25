@@ -1,0 +1,12 @@
+---
+- name: Setup for Nomad Jobs
+  ansible.builtin.import_tasks: setup_for_jobs.yml
+
+- name: Retrieve ACL token and set facts
+  ansible.builtin.import_tasks: retrieve_and_set_facts.yml
+
+- name: Submit Nomad jobs
+  ansible.builtin.import_tasks: submit_nomad_jobs.yml
+
+- name: Parse Nomad jobs and cleanup
+  ansible.builtin.import_tasks: parse_and_cleanup.yml

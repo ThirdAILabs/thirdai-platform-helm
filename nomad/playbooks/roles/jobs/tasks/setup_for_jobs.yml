@@ -1,0 +1,60 @@
+---
+- name: Copy Keycloak theme directory to the target machine
+  when: 
+    - cluster_config.login_method == 'keycloak'
+    - ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Copy the entire Keycloak theme directory to the target location
+      ansible.builtin.copy:
+        src: "files/keycloak/custom-theme"
+        dest: "{{ shared_file_system.shared_dir }}/keycloak-themes/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      register: result
+
+    - name: Fail the task if copying the theme directory fails
+      ansible.builtin.fail:
+        msg: "Failed to copy Keycloak theme directory to {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove copied theme directory if the copy operation failed
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/keycloak-themes/custom-theme"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook after rollback
+      ansible.builtin.fail:
+        msg: "Copying Keycloak theme directory failed and rollback performed on {{ ansible_host }}."
+
+- name: Copy Keycloak Cache to the target machine
+  when: 
+    - cluster_config.login_method == 'keycloak'
+    - ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Copy the entire Keycloak Cache to the target location
+      ansible.builtin.copy:
+        src: "files/keycloak/cache-ispn-jdbc-ping.xml"
+        dest: "{{ shared_file_system.shared_dir }}/keycloak-themes/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      register: result
+
+    - name: Fail the task if copying the Cache fails
+      ansible.builtin.fail:
+        msg: "Failed to copy Keycloak Cache to {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove copied Cache if the copy operation failed
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/keycloak-themes/cache-ispn-jdbc-ping.xml"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook after rollback
+      ansible.builtin.fail:
+        msg: "Copying Keycloak Cache failed and rollback performed on {{ ansible_host }}."

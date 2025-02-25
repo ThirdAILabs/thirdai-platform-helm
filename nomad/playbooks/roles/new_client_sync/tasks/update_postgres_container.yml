@@ -1,0 +1,44 @@
+---
+- name: Grant access of database to the new clients
+  block:
+    - name: Add line in pg_hba.conf on debian/amazon-linux 2023
+      when: ansible_pkg_mgr == "dnf" or ansible_pkg_mgr == "apt"
+      community.postgresql.postgresql_pg_hba:
+        dest: "{{ sql_server.database_dir }}/data/pg_hba.conf"
+        contype: host
+        databases: all
+        users: all
+        address: "{{ item }}"
+        netmask: "255.255.255.255"
+        method: "md5"
+      loop: "{{ sql_clients }}"
+      register: result
+    
+    - name: Add line in pg_hba.conf on amazon-linux 2
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ansible.builtin.lineinfile:
+        path: "{{ sql_server.database_dir }}/data/pg_hba.conf"
+        line: "host all all {{ item }}/32 md5"
+        insertbefore: EOF
+        state: present
+      loop: "{{ sql_clients }}"
+      register: result
+
+    - name: Fail if access grant failed
+      ansible.builtin.fail:
+        msg: "Failed to grant access of database on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+    
+    - name: Reload pg_hba.conf to apply the changes
+      community.postgresql.postgresql_query:
+        db: modelbazaar
+        login_user: "{{ sql_server.username }}"
+        login_password: "{{ sql_server.database_password }}"
+        login_host: "{{ sql_server.private_ip }}"
+        query: SELECT pg_reload_conf()
+      register: query_result
+    
+    - name: Check if the postgres was able to signal SIGHUP.
+      ansible.builtin.fail:
+        msg: "Unable to send SIGHUP signal to postgres instance"
+      when: query_result is failed or not query_result.query_result[0].pg_reload_conf

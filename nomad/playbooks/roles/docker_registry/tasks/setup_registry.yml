@@ -1,0 +1,93 @@
+---
+- name: Setup registry on the primary node
+  block:
+    - name: Install apache2-utils on Ubuntu/Debian systems
+      ansible.builtin.apt:
+        name: apache2-utils
+        state: present
+        update_cache: yes
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+
+    - name: Install httpd-tools on Red Hat-based systems using DNF
+      ansible.builtin.dnf:
+        name: httpd-tools
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+
+    - name: Install httpd-tools on Amazon Linux 2 using yum (command)
+      ansible.builtin.command: yum install -y httpd-tools
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum
+
+    - name: Fail if package installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install required packages on {{ ansible_host }}."
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)
+
+    - name: Ensure the Docker registry data directory exists on NFS
+      ansible.builtin.file:
+        path: "/opt/thirdai_platform/local-registry"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+
+    - name: Ensure the local auth directory exists
+      ansible.builtin.file:
+        path: "/opt/thirdai_platform/auth"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+
+    - name: Print Docker registry username and password
+      ansible.builtin.debug:
+        msg: "Docker Username: {{ docker_registry_username }}, Password: {{ docker_registry_password }}"
+
+    - name: Create htpasswd file for Docker registry authentication with bcrypt
+      ansible.builtin.command: "htpasswd -b -c -B /opt/thirdai_platform/auth/htpasswd {{ docker_registry_username }} {{ docker_registry_password }}"
+
+    - name: Load Docker image from tarball if docker_images is defined and non-empty
+      community.docker.docker_image:
+        load_path: "{{ docker_images }}/registry_2.tar"
+        name: "registry"
+        tag: "2"
+        state: present
+        source: load
+      when: docker_images is defined and docker_images | length > 0
+
+    - name: Pull Docker image from remote registry if docker_images is not defined or empty
+      community.docker.docker_image:
+        name: "registry"
+        tag: "2"
+        source: pull
+        state: present
+      when: docker_images is not defined or docker_images | length == 0
+
+    - name: Run Docker registry container with authentication and SSL
+      community.docker.docker_container:
+        name: "local-docker-registry"
+        image: "registry:2"
+        state: started
+        ports:
+          - "5000:5000"
+        volumes:
+          - "/opt/thirdai_platform/local-registry:/var/lib/registry"
+          - "/opt/thirdai_platform/auth:/auth"
+        env:
+          REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+          REGISTRY_AUTH: "htpasswd"
+          REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+          REGISTRY_AUTH_HTPASSWD_REALM: "Registry Realm"
+        restart_policy: always
+
+    - name: Wait for Docker registry to start
+      ansible.builtin.wait_for:
+        port: 5000
+        host: "{{ shared_file_system.private_ip }}"
+        delay: 10

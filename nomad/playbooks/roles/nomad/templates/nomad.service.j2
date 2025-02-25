@@ -1,0 +1,13 @@
+[Unit]
+Description=Nomad Agent
+After=network.target
+
+[Service]
+ExecStart={{ nomad_binary }} agent -config=/opt/thirdai_platform/nomad/nomad_node_configs/nomad_agent_config.hcl
+Restart=on-failure
+User=root
+Group=root
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,55 @@
+---
+- name: Set up shared_file_system variable
+  ansible.builtin.set_fact:
+    shared_file_system:
+      private_ip: "{{ item.private_ip }}"
+      shared_dir: "{{ item.roles.shared_file_system.shared_dir }}"
+  when: "'shared_file_system' in item.roles"
+  loop: "{{ nodes }}"
+
+- name: Collect critical services nodes
+  ansible.builtin.set_fact:
+    critical_services_nodes: >-
+      {{
+        (critical_services_nodes | default([])) + [{
+          'private_ip': item.private_ip,
+          'run_jobs': item.roles.critical_services.run_jobs,
+          'ssh_username': item.ssh_username
+        }]
+      }}
+  when: "'critical_services' in item.roles"
+  loop: "{{ nodes }}"
+
+- name: Initialize current_node_info
+  set_fact:
+    current_node_info:
+      is_critical_services_node: false
+      should_run_jobs: false
+
+- name: Update current_node_info if node is critical service node
+  when: item.private_ip == ansible_host_private_ip
+  set_fact:
+    current_node_info:
+      is_critical_services_node: true
+      should_run_jobs: "{{ item.run_jobs | default(false) }}"
+  loop: "{{ critical_services_nodes }}"
+  loop_control:
+    loop_var: item
+
+- name: Set up critical_services_ips variable
+  ansible.builtin.set_fact:
+    critical_services_ips: "{{ critical_services_ips | default([]) + [item.private_ip] }}"
+  when: item.roles.critical_services is defined
+  loop: "{{ nodes }}"
+
+- name: Set up sql_server variable
+  ansible.builtin.set_fact:
+    sql_server:
+      private_ip: "{{ item.private_ip }}"
+      database_dir: "{{ item.roles.sql_server.database_dir }}"
+      database_password: "{{ item.roles.sql_server.database_password }}"
+      username: "modelbazaaruser"
+  when:
+    - cluster_config.self_hosted_sql_server
+    - "'sql_server' in item.roles"
+  loop: "{{ nodes }}"

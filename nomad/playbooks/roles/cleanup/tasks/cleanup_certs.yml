@@ -1,0 +1,26 @@
+---
+- name: Remove SSL certificate and key
+  ansible.builtin.file:
+    path: "{{ shared_file_system.shared_dir }}/certs/{{ item }}"
+    state: absent
+  loop:
+    - traefik.crt
+    - traefik.key
+    - openssl.cnf # If generated for OpenSSL < 1.1.1
+  ignore_errors: true
+
+- name: Remove certificates.toml configuration file
+  ansible.builtin.file:
+    path: "{{ shared_file_system.shared_dir }}/certs/certificates.toml"
+    state: absent
+  ignore_errors: true
+
+- name: Remove the certificates directory
+  ansible.builtin.file:
+    path: "{{ shared_file_system.shared_dir }}/certs"
+    state: absent
+  ignore_errors: true
+
+- name: Confirm certificate folder cleanup completion
+  ansible.builtin.debug:
+    msg: "Certificates folder and related files have been successfully cleaned up on {{ ansible_host }}."

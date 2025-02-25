@@ -1,0 +1,19 @@
+---
+- name: Initialize nfs_clients and sql_clients variables of client nodes
+  ansible.builtin.set_fact:
+    nfs_clients: []
+    sql_clients: []
+
+- name: Set up nfs_clients variable
+  ansible.builtin.set_fact:
+    nfs_clients: "{{ nfs_clients | default([]) + [{'private_ip': item.private_ip}] }}"
+  when: "'roles' not in item or 'shared_file_system' not in item.roles"
+  loop: "{{ nodes }}"
+
+- name: Set up sql_clients variable
+  ansible.builtin.set_fact:
+    sql_clients: "{{ sql_clients | default([]) + [item.private_ip] }}"
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - "'roles' not in item or 'sql_server' not in item.roles"
+  loop: "{{ nodes }}"

@@ -1,0 +1,17 @@
+---
+- name: Check if all the secrets are provided in the file
+  ansible.builtin.set_fact:
+    has_file_all_secrets: "{{ (has_file_all_secrets | default(true)) and (cluster_config[item] is defined and cluster_config[item] | length > 0) }}"
+  loop:
+    - admin_mail
+    - admin_username
+    - admin_password
+
+- name: Retrieve Secrets from the config file
+  ansible.builtin.set_fact:
+    secrets:
+      admin_mail: "{{ cluster_config.admin_mail }}"
+      admin_username: "{{ cluster_config.admin_username }}"
+      admin_password: "{{ cluster_config.admin_password }}"
+      genai_key: "{{ cluster_config.genai_key | default('') }}"
+  when: has_file_all_secrets

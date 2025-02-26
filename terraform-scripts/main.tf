@@ -69,9 +69,9 @@ module "eks" {
   eks_managed_node_groups = {
     main = {
       name             = "${var.cluster_name}-node-group"
-      desired_capacity = var.node_group_desired_capacity
-      max_capacity     = var.node_group_max_capacity
-      min_capacity     = var.node_group_min_capacity
+      desired_size = var.node_group_desired_size
+      max_size     = var.node_group_max_size
+      min_size     = var.node_group_min_size
       instance_types   = var.node_group_instance_types
 
       additional_tags = {
@@ -166,10 +166,22 @@ resource "aws_db_instance" "thirdai_platform_db" {
 
 locals {
   rds_endpoint = var.existing_rds_endpoint != "" ? var.existing_rds_endpoint : aws_db_instance.thirdai_platform_db[0].endpoint
+  rds_hostname = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[0] : aws_db_instance.thirdai_platform_db[0].address
+  rds_port     = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[1] : aws_db_instance.thirdai_platform_db[0].port
   rds_username = var.existing_rds_endpoint != "" ? var.existing_rds_username : var.rds_master_username
   rds_password = var.existing_rds_endpoint != "" ? var.existing_rds_password : var.rds_master_password
 }
 
+resource "null_resource" "create_additional_dbs" {
+  depends_on = [ aws_db_instance.thirdai_platform_db ]
+
+  provisioner "local-exec" {
+    command = <<EOF
+      PGPASSWORD="${local.rds_password}" psql -h ${local.rds_hostname} -p ${local.rds_port} -U ${local.rds_username} -d modelbazaar -c "CREATE DATABASE grafana;"
+      PGPASSWORD="${local.rds_password}" psql -h ${local.rds_hostname} -p ${local.rds_port} -U ${local.rds_username} -d modelbazaar -c "CREATE DATABASE keycloak;"
+    EOF
+  }
+}
 resource "aws_efs_file_system" "thirdai_platform_efs" {
   count     = var.existing_efs_id != "" ? 0 : 1
   encrypted = var.efs_encryption_enabled
@@ -222,7 +234,7 @@ rds_endpoint="${local.rds_endpoint}"
 rds_username="${local.rds_username}"
 rds_password="${local.rds_password}"
 modelbazaar_db_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar"
-keycloak_db_uri="postgresql://${local.rds_endpoint}/modelbazaar"
-grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar?sslmode=require"
+keycloak_db_uri="postgresql://${local.rds_endpoint}/keycloak"
+grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/grafana?sslmode=require"
 EOF
 }

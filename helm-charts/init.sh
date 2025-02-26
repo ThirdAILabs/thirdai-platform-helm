@@ -181,9 +181,9 @@ echo "Deployment complete!"
 echo "Verify your Ingress with:"
 echo "  kubectl get ingress -n $NAMESPACE"
 
-########################################
+#####################################
 # Add prometheus-community helm chart  #
-########################################
+#####################################
 echo "Adding the Prometheus Community Helm repository..."
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
 

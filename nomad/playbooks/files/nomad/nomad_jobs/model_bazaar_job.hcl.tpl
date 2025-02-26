@@ -39,7 +39,7 @@ job "modelbazaar" {
         name     = "Modelbazaar Health Check"
         type     = "http"
         port     = "modelbazaar-http"
-        path     = "/api/health"
+        path     = "/api/v2/health"
         interval = "5s"
         timeout  = "2s"
 

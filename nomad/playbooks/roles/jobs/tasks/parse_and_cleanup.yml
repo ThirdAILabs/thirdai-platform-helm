@@ -258,7 +258,7 @@
 
         - name: Wait for ModelBazaar to become ready
           ansible.builtin.uri:
-            url: "http://traefik-http.service.consul/api/health"
+            url: "http://traefik-http.service.consul/api/v2/health"
             method: GET
           register: modelbazaar_status
           retries: 30

@@ -198,7 +198,7 @@ resource "aws_lambda_function" "create_db_lambda" {
   function_name = "create-db-lambda-${random_string.unique_suffix.result}"
   role = aws_iam_role.db_creator_lambda_role.arn
   handler = "index.handler"
-  runtime = "nodejs16.x"
+  runtime = "nodejs18.x"
   timeout = 60
 
   vpc_config {

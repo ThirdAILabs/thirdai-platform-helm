@@ -29,7 +29,7 @@ spec:
         volumeMounts:
           - name: license-file
             mountPath: /tmp/secret
-          - name: shared-modelbazaar
+          - name: model-bazaar
             mountPath: /model_bazaar
 
       - name: download-pretrained-models
@@ -45,7 +45,7 @@ spec:
               echo "Pretrained model already exists, skipping download.";
             fi
         volumeMounts:
-          - name: shared-modelbazaar
+          - name: model-bazaar
             mountPath: /model_bazaar
 
 
@@ -75,13 +75,13 @@ spec:
             cpu: {{ .Values.modelbazaar_resources.limits.cpu }}
             memory: {{ .Values.modelbazaar_resources.limits.memory }}
         volumeMounts:
-          - name: shared-modelbazaar
+          - name: model-bazaar
             mountPath: /model_bazaar
 
       volumes:
-      - name: shared-modelbazaar
+      - name: model-bazaar
         persistentVolumeClaim:
-          claimName: modelbazaar-efs-pvc
+          claimName: model-bazaar-pvc
       - name: license-file
         secret:
           secretName: {{ .Values.licenseSecretName }}

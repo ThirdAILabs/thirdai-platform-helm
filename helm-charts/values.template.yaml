@@ -23,8 +23,6 @@ ingress:
 
 # EFS CSI Persistent Volume Claim settings
 efs:
-  storageClassName: efs-sc
-  size: "1Gi"
   fileSystemId: "${EFS_FILE_SYSTEM_ID}"
 
 modelbazaar_resources:

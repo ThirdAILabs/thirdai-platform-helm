@@ -1,0 +1,165 @@
+---
+- name: Collect Vault initilization variables
+  block:
+    - name: Load Vault initialization variables from head node
+      when: ansible_host_private_ip == critical_services_ips[0]
+      block:
+        - name: Load Vault initialization data from disk
+          slurp:
+            src: /opt/vault/init-output.json
+          register: vault_init_file
+
+        - name: Parse Vault initialization JSON
+          set_fact:
+            vault_init_data: "{{ vault_init_file.content | b64decode | from_json }}"
+
+    - name: Get name of the node with matching private_ip
+      set_fact:
+        vault_server_name: "{{ cluster_config.nodes 
+                      | selectattr('private_ip', 'match', '^' + critical_services_ips[0] + '$') 
+                      | map(attribute='name') 
+                      | first }}"
+
+    - name: Distribute vault_init_data to all hosts
+      set_fact:
+        vault_init_data: "{{ hostvars[vault_server_name].vault_init_data }}"
+
+- name: Start Nomad server on the designated node
+  when: ansible_host_private_ip in critical_services_ips
+  block:
+    - name: Determine node pool and class
+      ansible.builtin.set_fact:
+        node_pool: >-
+          {% if current_node_info.is_critical_services_node and not current_node_info.should_run_jobs %}critical_services{% else %}default{% endif %}
+        node_class: "{{ 'critical_services' if current_node_info.is_critical_services_node else 'default' }}"
+
+    - name: Find Nomad binary path
+      ansible.builtin.command: which nomad
+      register: nomad_binary_path
+
+    - name: Set default Nomad binary path if not found
+      ansible.builtin.set_fact:
+        nomad_binary: "{{ nomad_binary_path.stdout | default('/usr/local/bin/nomad') }}"
+
+    - name: Generate Nomad server configuration file when Amazon Linux 2
+      ansible.builtin.shell: |
+        cd /opt/thirdai_platform
+        bash nomad/nomad_scripts/start_nomad_agent.sh true true {{ node_pool }} {{ node_class }} {{ ansible_host_private_ip }} '{{ critical_services_ips | to_json }}' {{ critical_services_ips | length }} {{ vault_init_data.root_token }}
+      args:
+        executable: /bin/bash
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+
+    - name: Generate Nomad server configuration file when not having Amazon Linux 2
+      ansible.builtin.shell: |
+        cd /opt/thirdai_platform
+        bash nomad/nomad_scripts/start_nomad_agent.sh true true {{ node_pool }} {{ node_class }} {{ ansible_host_private_ip }} '{{ critical_services_ips | tojson }}' {{ critical_services_ips | length }} {{ vault_init_data.root_token }}
+      args:
+        executable: /bin/bash
+      when: ansible_distribution != "Amazon" or ansible_distribution_version != "2"
+
+    - name: Install Nomad systemd service
+      ansible.builtin.template:
+        src: templates/nomad.service.j2
+        dest: /etc/systemd/system/nomad.service
+        mode: "0644"
+
+    - name: Reload systemd to recognize the Nomad service
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start and enable Nomad server via systemd
+      ansible.builtin.systemd:
+        name: nomad
+        state: restarted
+        enabled: yes
+
+  rescue:
+    - name: Rollback - Stop Nomad server if start failed
+      ansible.builtin.systemd:
+        name: nomad
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Remove Nomad systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/nomad.service
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Starting Nomad server failed and rollback performed on {{ ansible_host }}."
+
+- name: Pause for 20 seconds to ensure Nomad server starts properly
+  ansible.builtin.pause:
+    seconds: 20
+
+- name: Start Nomad clients on non-server nodes
+  when: ansible_host_private_ip not in critical_services_ips
+  block:
+    - name: Determine node pool and class for clients
+      ansible.builtin.set_fact:
+        node_pool: >-
+          {% if current_node_info.is_critical_services_node and not current_node_info.should_run_jobs %}critical_services{% else %}default{% endif %}
+        node_class: "{{ 'critical_services' if current_node_info.is_critical_services_node else 'default' }}"
+
+    - name: Find Nomad binary path
+      ansible.builtin.command: which nomad
+      register: nomad_binary_path
+
+    - name: Set default Nomad binary path if not found
+      ansible.builtin.set_fact:
+        nomad_binary: "{{ nomad_binary_path.stdout | default('/usr/local/bin/nomad') }}"
+
+    - name: Generate Nomad client configuration file on Amazon Linux
+      ansible.builtin.shell: |
+        cd /opt/thirdai_platform
+        bash nomad/nomad_scripts/start_nomad_agent.sh false true {{ node_pool }} {{ node_class }} {{ ansible_host_private_ip }} '{{ critical_services_ips | to_json }}' {{ critical_services_ips | length }} {{ vault_init_data.root_token }}
+      args:
+        executable: /bin/bash
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+
+
+    - name: Generate Nomad client configuration file on machines other than Amazon Linux 2
+      ansible.builtin.shell: |
+        cd /opt/thirdai_platform
+        bash nomad/nomad_scripts/start_nomad_agent.sh false true {{ node_pool }} {{ node_class }} {{ ansible_host_private_ip }} '{{ critical_services_ips | tojson }}' {{ critical_services_ips | length }} {{ vault_init_data.root_token }}
+      args:
+        executable: /bin/bash
+      when: ansible_distribution != "Amazon" or ansible_distribution_version != "2"
+
+
+    - name: Install Nomad systemd service
+      ansible.builtin.template:
+        src: templates/nomad.service.j2
+        dest: /etc/systemd/system/nomad.service
+        mode: "0644"
+
+    - name: Reload systemd to recognize the Nomad service
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start and enable Nomad client via systemd
+      ansible.builtin.systemd:
+        name: nomad
+        state: restarted
+        enabled: yes
+
+  rescue:
+    - name: Rollback - Stop Nomad client if start failed
+      ansible.builtin.systemd:
+        name: nomad
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Remove Nomad systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/nomad.service
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Starting Nomad client failed and rollback performed on {{ ansible_host }}."

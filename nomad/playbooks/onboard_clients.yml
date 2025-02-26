@@ -1,0 +1,109 @@
+---
+- name: Add new clients to the ThirdAI Enterprise
+  hosts: localhost
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Load the cluster config
+      include_vars: 
+        file: "{{ config_path }}"
+        name: cluster_config
+
+    - name: Validate cluster configuration file
+      ansible.builtin.include_tasks: validate_config/validate_cluster_config.yml
+    
+    - name: Set model_folder variable
+      ansible.builtin.set_fact:
+        model_folder: "{{ model_folder | default('') }}"
+    
+    - name: Load the client config that are being newly added
+      include_vars: 
+        file: "{{ new_client_config_path }}"
+        name: new_client_config
+      
+    - name: Validate the new client configuration file
+      ansible.builtin.include_tasks: validate_config/validate_new_client_config.yml
+
+    - name: Add new client hosts
+      include_tasks: initialize_environment.yml
+      vars:
+        nodes: "{{ new_client_config.nodes }}"
+    
+    - name: Add node running sql-server
+      include_tasks: initialize_environment.yml
+      when: cluster_config.self_hosted_sql_server
+      vars:
+        nodes: "{{ cluster_config.nodes | selectattr('roles', 'defined') | selectattr('roles.sql_server', 'defined') | list }}"
+    
+    - name: Add node running nfs-server
+      include_tasks: initialize_environment.yml
+      vars:
+        nodes: "{{ cluster_config.nodes | selectattr('roles', 'defined') | selectattr('roles.shared_file_system', 'defined') | list }}"
+
+- name: Execute Roles on Remote Hosts
+  hosts: all
+  gather_facts: true
+  become: true
+  any_errors_fatal: true # Would stop executing the play on all hosts, if any tasks fails on one of the host
+
+  pre_tasks:
+    - name: Load the cluster config
+      include_vars:
+        file: "{{ config_path }}"
+        name: cluster_config
+    
+    - name: Load the client config that are being newly added
+      include_vars: 
+        file: "{{ new_client_config_path }}"
+        name: new_client_config
+
+    - name: Set up shared_file_system, critical_services_ips, sql_server, nfs_clients, and sql_clients variables
+      include_tasks: setup_roles/setup_new_client_roles.yml
+
+  # TODO (anyone): Modify this to include roles in a better/clear way similar to `test_deploy.yml`
+  tasks:
+    - name: Apply validation role
+      include_role:
+        name: validation
+      when:
+        - ansible_host_private_ip in new_client_config.nodes | map(attribute='private_ip') | list
+
+    # This will be only executed on appropriate sql/nfs server node.
+    # Need to apply before client can be configured to connect to nfs/database
+    - name: Apply new client sync role on appropriate SQL/NFS server node
+      include_role:
+        name: new_client_sync
+
+    - block:
+        - name: Apply NFS role
+          include_role:
+            name: nfs
+
+        - name: Apply models role if model_folder is defined and non-empty
+          include_role:
+            name: models
+          when:
+            - model_folder is defined
+            - model_folder | length > 0
+
+        - name: Apply Consul role
+          include_role:
+            name: consul
+
+        - name: Apply Nomad role
+          include_role:
+            name: nomad
+
+        - name: Apply Docker Registry role
+          include_role:
+            name: docker_registry
+    
+      when:
+        - ansible_host_private_ip in new_client_config.nodes | map(attribute='private_ip') | list
+      
+    - name: Update the telemetry client node list
+      include_role:
+        name: new_client_sync
+        tasks_from: update_telemetry_client_file.yml
+      when: ansible_host_private_ip == shared_file_system.private_ip

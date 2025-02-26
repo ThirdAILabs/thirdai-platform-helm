@@ -1,0 +1,25 @@
+---
+- name: Ensure all the nodes have required params provided
+  include_tasks: common_config_validations.yml
+  vars:
+    nodes: "{{ new_client_config.nodes }}"
+
+- name: New client nodes shouldn't contain 'roles' attribute
+  fail:
+    msg: "New client '{{ item.name }}' contains the forbidden attribute 'roles'."
+  with_items: "{{ new_client_config.nodes }}"
+  when: item.roles is defined
+
+- name: Ensure no overlap in the name of the cluster config and new client config
+  fail:
+    msg: "{{ result }} are the name of the new client nodes already present in the cluster config. Use a different name"
+  when: result | length > 0
+  vars:
+    result: "{{ cluster_config.nodes | map(attribute='name') | intersect(new_client_config.nodes | map(attribute='name')) | list }}"
+
+- name: Ensure no overlap in the private ip of the cluster config and new client config
+  fail:
+    msg: "{{ result }} are the client's private ips that already present in the cluster config"
+  when: result | length > 0
+  vars:
+    result: "{{ cluster_config.nodes | map(attribute='private_ip') | intersect(new_client_config.nodes | map(attribute='private_ip')) | list }}"

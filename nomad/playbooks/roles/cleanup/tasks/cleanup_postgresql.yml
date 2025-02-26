@@ -1,0 +1,50 @@
+---
+- name: Clean database when using self_hosted_sql_server
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+  block: 
+    - name: Stop and remove the PostgreSQL Docker container
+      community.docker.docker_container:
+        name: thirdai-platform-postgresql-server
+        state: absent
+
+    - name: Remove PostgreSQL data directory
+      ansible.builtin.file:
+        path: "{{ sql_server.database_dir }}/data"
+        state: absent
+
+    - name: Remove PostgreSQL Docker initialization directory
+      ansible.builtin.file:
+        path: "{{ sql_server.database_dir }}/docker-postgres-init"
+        state: absent
+
+    - name: Ensure no other processes use the postgres user
+      ansible.builtin.command: "pgrep -u postgres"
+      register: postgres_processes
+      failed_when: false
+      changed_when: false
+
+    - name: Remove PostgreSQL user if no other processes are running
+      ansible.builtin.user:
+        name: postgres
+        state: absent
+      when: postgres_processes.rc != 0
+      ignore_errors: true
+
+    - name: Remove PostgreSQL group if no other users are in it
+      ansible.builtin.group:
+        name: postgres
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Postgresql data directories
+      ansible.builtin.file:
+        path: "{{ sql_server.database_dir }}"
+        state: absent
+      ignore_errors: true
+      become: true
+
+    - name: Confirm PostgreSQL cleanup completion
+      ansible.builtin.debug:
+        msg: "PostgreSQL setup, data, and initialization files have been successfully cleaned up on {{ ansible_host }}."

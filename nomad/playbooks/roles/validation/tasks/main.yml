@@ -1,0 +1,131 @@
+- name: Check SSH and Sudo Access
+  ansible.builtin.command: sudo -n echo "Sudo check passed"
+  register: ssh_sudo_result
+  ignore_errors: true
+  failed_when: "'Sudo check passed' not in ssh_sudo_result.stdout"
+  changed_when: false
+  tags: ssh_sudo_access
+
+- name: Install ping utility on Debian/Ubuntu
+  ansible.builtin.apt:
+    name: iputils-ping
+    state: present
+  when: ansible_pkg_mgr == "apt"
+
+- name: Install ping utility on Red Hat-based systems
+  ansible.builtin.dnf:
+    name: iputils
+    state: present
+  when: ansible_pkg_mgr == "dnf"
+
+- name: Install ping utility on Amazon Linux 2
+  ansible.builtin.yum:
+    name: iputils
+    state: present
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+
+- name: Verify Internet Access
+  ansible.builtin.command: ping -c 3 www.google.com
+  register: internet_access_result
+  ignore_errors: true
+  failed_when: "'0% packet loss' not in internet_access_result.stdout"
+  changed_when: false
+  tags: internet_access
+
+- name: Check ram and cpu cores
+  ansible.builtin.shell: |
+    echo "Memory: $(grep MemTotal /proc/meminfo | awk '{print $2}') kB"
+    echo "CPU Cores: $(nproc)"
+  register: system_resources_result
+  changed_when: false
+  tags: system_resources
+  failed_when: >
+    (system_resources_result.stdout_lines[0].split()[1]|int < 16000000) or
+    (system_resources_result.stdout_lines[1].split()[2]|int < 8)
+
+- name: Disk space requirement of the NFS
+  when: ansible_host_private_ip == shared_file_system.private_ip
+  block:
+    - name: Create nfs directory to check the disk available on the mounted partition
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: directory
+        mode: "0774"
+      register: create_dir_result
+      failed_when: create_dir_result is failed
+    
+    - name: Get mount usage information of the nfs directory
+      ansible.builtin.shell: df -B1 "{{ shared_file_system.shared_dir }}"
+      register: mount_info
+      changed_when: false
+    
+    - name: |
+        Find disk space occupied by the shared directory currently.
+        Description: This would be useful incase of re-installation, as the same location would be getting overwritten.
+      ansible.builtin.shell: du -s -B1 "{{ shared_file_system.shared_dir }}"
+      register: shared_dir_usage_stats
+      changed_when: false
+    
+    - name: Extract the available disk space.
+      ansible.builtin.set_fact:
+        bytes_available: "{{ mount_info.stdout_lines[1].split()[3] | int - shared_dir_usage_stats.stdout_lines[0].split()[0] | int }}"
+        bytes_required: "{{ 32000000000 if (docker_images is not defined or docker_images | length == 0) else 64000000000 }}"
+
+    - name: Check for enough disk space available
+      assert:
+        that: bytes_available | int >= bytes_required | int
+        msg: Not enough disk space available. Clear at least {{ (bytes_required | int - bytes_available | int) / 1000000 }} MB space.
+
+- name: Install netcat on Debian/Ubuntu
+  when: ansible_pkg_mgr == "apt"
+  block:
+    - name: Check if 'nc' (netcat) is installed
+      ansible.builtin.command: which nc
+      register: nc_check
+      ignore_errors: yes
+
+    - name: Install netcat-traditional on Debian/Ubuntu if 'nc' is not installed
+      when: nc_check.failed
+      ansible.builtin.command: sudo apt-get install netcat-traditional
+
+- name: Install netcat if not present (Amazon Linux 2023)
+  ansible.builtin.dnf:
+    name: nc
+    state: present
+  when: ansible_pkg_mgr == "dnf"
+  tags: netcat_install
+
+- name: Install netcat if not present (Amazon Linux 2)
+  ansible.builtin.command: yum install -y nc
+  when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+  tags: netcat_install
+
+- name: Check Port Exposure on other nodes in the cluster (using private IPs)
+  ansible.builtin.shell: |
+    nc -zv -w 5 {{ item.0 }} {{ item.1 }} 2>&1 | grep -E "succeeded|refused|Connected to {{ item.0 }}:{{ item.1 }}" && echo "Port {{ item.1 }} on {{ item.0 }} open" || echo "Port {{ item.1 }} on {{ item.0 }} closed"
+  loop: "{{ machine_private_ips | difference([ansible_host]) | product([22, 80, 443, 2049, 4646, 4647, 4648, 5000, 5432, 7800, 8500]) | list }}"
+  register: port_exposure_result
+  changed_when: false
+  tags: port_exposure
+  failed_when: "'closed' in port_exposure_result.stdout"
+
+- name: Check if the password is default or password contains special characters
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+  block:
+    - name: Check for default password
+      debug:
+        msg: "WARNING: You are using the default password. Please change and run the script again if running in production environment."
+      when: sql_server.database_password == "S123kP923wX311TqZ523v"
+
+    - name: Fail if password contains special characters
+      fail:
+        msg: "ERROR: Your password contains special characters, which are not allowed. Please use a password without special characters."
+      when: sql_server.database_password is search('[!@#$%^&*(),.?":{}|<>]')
+
+    - name: Wait for 5 seconds if using default password
+      pause:
+        seconds: 5
+      when: sql_server.database_password == "S123kP923wX311TqZ523v"
+

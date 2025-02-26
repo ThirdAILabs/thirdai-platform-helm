@@ -1,0 +1,6 @@
+---
+- name: Install Consul
+  ansible.builtin.import_tasks: install_consul.yml
+
+- name: Manage Consul services (server and client)
+  ansible.builtin.import_tasks: manage_consul_services.yml

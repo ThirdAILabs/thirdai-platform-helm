@@ -1,0 +1,373 @@
+---
+- name: Install wget if not present
+  block:
+    - name: Install wget package on Debian/Ubuntu
+      ansible.builtin.apt:
+        name: wget
+        state: present
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+
+    - name: Install wget package on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: wget
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+
+    - name: Install wget package on Amazon Linux 2 using yum (command)
+      ansible.builtin.command: yum install -y wget
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum
+
+    - name: Fail if wget installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install wget on {{ ansible_host }}."
+      when:
+        - ansible_pkg_mgr == "apt" and result_apt is failed
+        - ansible_pkg_mgr == "dnf" and result_dnf is failed
+        - ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed
+
+  rescue:
+    - name: Rollback - Remove wget package if installation failed on Debian/Ubuntu
+      ansible.builtin.apt:
+        name: wget
+        state: absent
+        update_cache: true
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Rollback - Remove wget package if installation failed on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: wget
+        state: absent
+      when: ansible_pkg_mgr == "dnf"
+      ignore_errors: true
+
+    - name: Rollback - Remove wget package if installation failed on Amazon Linux 2
+      ansible.builtin.command: yum remove -y wget
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Installation of wget failed and rollback performed on {{ ansible_host }}."
+
+
+- name: Install Docker if not present
+  block:
+    - name: Install Docker on Ubuntu
+      when: ansible_pkg_mgr == "apt"
+      block:
+        - name: Install prerequisites for Docker
+          ansible.builtin.apt:
+            name:
+              - ca-certificates
+              - curl
+              - gnupg
+              - lsb-release
+            state: present
+            update_cache: yes
+
+        - name: Create Docker apt keyring directory
+          ansible.builtin.file:
+            path: /etc/apt/keyrings
+            state: directory
+            mode: "0755"
+
+        - name: Add Docker’s official GPG key
+          ansible.builtin.get_url:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            dest: /etc/apt/keyrings/docker.asc
+            mode: "0644"
+
+        - name: Add Docker apt repository
+          ansible.builtin.shell: |
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | tee /etc/apt/sources.list.d/docker.list
+          args:
+            executable: /bin/bash
+
+        - name: Update apt package index
+          ansible.builtin.apt:
+            update_cache: yes
+
+        - name: Install Docker and related packages
+          ansible.builtin.apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-buildx-plugin
+              - docker-compose-plugin
+            state: present
+          register: result_apt
+
+    - name: Install Docker on Amazon Linux 2023
+      when: ansible_pkg_mgr == "dnf"
+      block:
+        - name: Uninstall old versions of Docker
+          ansible.builtin.dnf:
+            name:
+              - docker
+              - docker-client
+              - docker-client-latest
+              - docker-common
+              - docker-latest
+              - docker-latest-logrotate
+              - docker-logrotate
+              - docker-selinux
+              - docker-engine-selinux
+              - docker-engine
+            state: absent
+
+        - name: Install dnf-plugins-core
+          ansible.builtin.dnf:
+            name: dnf-plugins-core
+            state: present
+            update_cache: yes
+
+        - name: Add Docker repository
+          ansible.builtin.shell: |
+            sudo dnf-3 config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+          args:
+            executable: /bin/bash
+
+        - name: Install Docker Engine
+          ansible.builtin.dnf:
+            name:
+              - docker
+            state: present
+            update_cache: yes
+          register: result_dnf
+
+        - name: Start Docker service
+          ansible.builtin.systemd:
+            name: docker
+            state: started
+            enabled: yes
+
+        - name: Verify Docker installation by running hello-world container
+          ansible.builtin.shell: sudo docker run hello-world
+          register: docker_run_result
+          failed_when: docker_run_result.rc != 0
+
+        - name: Add current user to the Docker group
+          ansible.builtin.user:
+            name: "{{ ansible_user }}"
+            groups: docker
+            append: yes
+
+    - name: Install Docker on Amazon Linux 2 using yum (command)
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      block:
+        - name: Uninstall old versions of Docker
+          ansible.builtin.command: yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
+
+        - name: Install Docker Engine
+          ansible.builtin.command: yum install -y docker
+          register: result_yum
+
+        - name: Start Docker service
+          ansible.builtin.systemd:
+            name: docker
+            state: started
+            enabled: yes
+
+        - name: Verify Docker installation by running hello-world container
+          ansible.builtin.shell: sudo docker run hello-world
+          register: docker_run_result
+          failed_when: docker_run_result.rc != 0
+
+        - name: Add current user to the Docker group
+          ansible.builtin.user:
+            name: "{{ ansible_user }}"
+            groups: docker
+            append: yes
+
+    - name: Fail if Docker installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install Docker on {{ ansible_host }}."
+      when:
+        - ansible_pkg_mgr == "apt" and result_apt is failed
+        - ansible_pkg_mgr == "dnf" and result_dnf is failed
+        - ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed
+
+  rescue:
+    - name: Rollback - Remove Docker if installation failed on Ubuntu
+      ansible.builtin.shell: |
+        if command -v docker &> /dev/null; then
+          sudo apt-get purge -y docker-ce docker-ce-cli containerd.io
+          sudo rm -rf /var/lib/docker
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Rollback - Remove Docker if installation failed on Amazon Linux 2023
+      ansible.builtin.shell: |
+        if command -v docker &> /dev/null; then
+          sudo dnf remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
+          sudo rm -rf /var/lib/docker
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "dnf"
+      ignore_errors: true
+
+    - name: Rollback - Remove Docker if installation failed on Amazon Linux 2
+      ansible.builtin.shell: |
+        if command -v docker &> /dev/null; then
+          sudo yum remove -y docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine
+          sudo rm -rf /var/lib/docker
+        fi
+      args:
+        executable: /bin/bash
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Installation of Docker failed and rollback performed on {{ ansible_host }}."
+
+
+- name: Configure Docker daemon for using local DNS resolver
+  vars:
+    extra_stub_dns_ip: "172.17.0.1"
+  block:
+    - name: Determine if systemd-resolved is available
+      ansible.builtin.service_facts:
+
+    - name: Set variable use_systemd_resolved
+      set_fact:
+        use_systemd_resolved: "{{ 'systemd-resolved.service' in services }}"
+    
+    - name: Configure Docker to use local DNS resolver with systemd-resolved
+      when: use_systemd_resolved
+      block:
+        - name: Create systemd-resolved Docker DNS configuration
+          copy:
+            dest: /etc/systemd/resolved.conf.d/docker.conf
+            content: |
+              [Resolve]
+              DNSStubListener=yes
+              DNSStubListenerExtra={{ extra_stub_dns_ip }}
+            mode: "0644"
+
+        - name: Restart systemd-resolved to apply new DNS configuration
+          systemd:
+            name: systemd-resolved
+            state: restarted
+            enabled: yes
+
+        - name: Ensure Docker daemon configuration directory exists
+          file:
+            path: /etc/docker
+            state: directory
+            mode: "0755"
+
+        - name: Ensure daemon.json exists
+          copy:
+            dest: /etc/docker/daemon.json
+            content: "{}"
+            mode: "0644"
+            force: no
+
+        - name: Update Docker Daemon Json
+          block:
+            - name: Load existing daemon.json
+              slurp:
+                src: /etc/docker/daemon.json
+              register: imported_var
+              failed_when: imported_var is not defined
+
+            - name: Decode and parse JSON
+              set_fact:
+                json_data: "{{ imported_var.content | b64decode | from_json | default({}) }}"
+
+            - name: Add or update DNS servers in daemon.json
+              set_fact:
+                updated_json: >-
+                  {{
+                    json_data | combine({
+                      'dns': (json_data.dns | default([]) + [ extra_stub_dns_ip ]) | unique
+                    })
+                  }}
+
+            - name: Write updated JSON back to daemon.json
+              copy:
+                content: "{{ updated_json | to_nice_json }}"
+                dest: /etc/docker/daemon.json
+                mode: "0644"
+
+        - name: Restart Docker to apply changes
+          systemd:
+            name: docker
+            state: restarted
+            enabled: yes
+
+
+    - name: Configure Docker to use local DNS resolver with dnsmasq
+      when: not use_systemd_resolved
+      block:
+        - name: Ensure dnsmasq is configured to listen on Docker bridge interface
+          block:
+            - name: Add listen-address to dnsmasq configuration
+              lineinfile:
+                path: /etc/dnsmasq.d/10-consul
+                regexp: '^listen-address='
+                line: 'listen-address=127.0.0.1,{{ extra_stub_dns_ip }}'
+                insertafter: BOF
+                create: yes
+
+            - name: Restart dnsmasq to apply configuration changes
+              service:
+                name: dnsmasq
+                state: restarted
+                enabled: yes
+
+        - name: Ensure Docker daemon configuration directory exists
+          file:
+            path: /etc/docker
+            state: directory
+            mode: "0755"
+
+        - name: Ensure daemon.json exists
+          copy:
+            dest: /etc/docker/daemon.json
+            content: "{}"
+            mode: "0644"
+            force: no
+
+        - name: Update Docker Daemon Json
+          block:
+            - name: Load existing daemon.json
+              slurp:
+                src: /etc/docker/daemon.json
+              register: imported_var
+              failed_when: imported_var is not defined
+
+            - name: Decode and parse JSON
+              set_fact:
+                json_data: "{{ imported_var.content | b64decode | from_json | default({}) }}"
+
+            - name: Add or update DNS servers in daemon.json
+              set_fact:
+                updated_json: >-
+                  {{
+                    json_data | combine({
+                      'dns': (json_data.dns | default([]) + [ extra_stub_dns_ip ]) | unique
+                    })
+                  }}
+
+            - name: Write updated JSON back to daemon.json
+              copy:
+                content: "{{ updated_json | to_nice_json }}"
+                dest: /etc/docker/daemon.json
+                mode: "0644"
+
+        - name: Restart Docker to apply changes
+          systemd:
+            name: docker
+            state: restarted
+            enabled: yes

@@ -1,0 +1,30 @@
+---
+- name: Set correct permissions for the license file
+  when: ansible_host_private_ip == critical_services_nodes[0].private_ip
+  block:
+    - name: Set permissions for the license file
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json"
+        mode: "0664"
+        owner: "{{ critical_services_nodes[0].ssh_username }}"
+        group: nomad_nfs
+      register: result
+
+    - name: Fail if setting permissions failed
+      ansible.builtin.fail:
+        msg: "Failed to set correct permissions for the license file on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Reset permissions on failure
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/license/ndb_enterprise_license.json"
+        mode: "0644" # Default mode after rollback
+        owner: root
+        group: root
+      when: ansible_host_private_ip == critical_services_nodes[0].private_ip
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Setting permissions for the license file failed and rollback performed on {{ ansible_host }}."

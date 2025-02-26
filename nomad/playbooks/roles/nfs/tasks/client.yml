@@ -1,0 +1,93 @@
+---
+- name: Install and configure NFS clients
+  block:
+    - name: Install NFS client packages on Debian/Ubuntu
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+
+    - name: Install NFS client packages on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: nfs-utils
+        state: present
+        update_cache: true
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+
+    - name: Install NFS client packages on Amazon Linux 2
+      ansible.builtin.command: yum install -y nfs-utils
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      register: result_yum
+
+    - name: Fail if NFS client package installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install NFS client packages on {{ ansible_host }}. Error: {{ result }}"
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)
+
+    - name: Check if shared directory exists
+      ansible.builtin.stat:
+        path: "{{ shared_file_system.shared_dir }}"
+      register: dir_exists
+
+    - name: Create the shared directory on the client if it doesn't exist
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: directory
+        mode: "0755"
+      when: not dir_exists.stat.exists
+      register: result_dir
+
+    - name: Fail if shared directory creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create shared directory on {{ ansible_host }}. Error: {{ result_dir }}"
+      when: result_dir is failed
+
+    - name: Mount the shared directory from NFS server
+      ansible.posix.mount:
+        path: "{{ shared_file_system.shared_dir }}"
+        src: "{{ shared_file_system.private_ip }}:{{ shared_file_system.shared_dir }}"
+        fstype: nfs
+        opts: rw,hard,intr
+        state: mounted
+      register: result_mount
+
+    - name: Fail if mounting NFS shared directory failed
+      ansible.builtin.fail:
+        msg: "Failed to mount NFS shared directory on {{ ansible_host }}. Error: {{ result_mount }}"
+      when: result_mount is failed
+
+    - name: Ensure the NFS mount is persistent in fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "{{ shared_file_system.private_ip }}:{{ shared_file_system.shared_dir }} {{ shared_file_system.shared_dir }} nfs rw,hard,intr 0 0"
+        create: true
+        mode: "0644"
+      register: result_fstab
+
+    - name: Fail if ensuring NFS mount is persistent failed
+      ansible.builtin.fail:
+        msg: "Failed to ensure NFS mount is persistent in fstab on {{ ansible_host }}. Error: {{ result_fstab }}"
+      when: result_fstab is failed
+
+  rescue:
+    - name: Rollback - Unmount and remove NFS directories on failure
+      ansible.posix.mount:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: unmounted
+      ignore_errors: true
+
+    - name: Remove NFS shared directory on the client
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "NFS client installation or configuration failed on {{ ansible_host }}. Rollback performed."

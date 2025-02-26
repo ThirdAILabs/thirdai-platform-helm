@@ -1,0 +1,8 @@
+---
+- name: Install OpenSSL and set up directory
+  ansible.builtin.import_tasks: install_and_setup_directory.yml
+  when: ansible_host_private_ip == critical_services_ips[0]
+
+- name: Generate SSL certificate and configure certificates.toml
+  ansible.builtin.import_tasks: generate_certificate_and_configure.yml
+  when: ansible_host_private_ip == critical_services_ips[0]

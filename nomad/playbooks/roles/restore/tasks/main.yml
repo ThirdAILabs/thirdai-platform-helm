@@ -1,0 +1,8 @@
+- name: Upload Zip file
+  ansible.builtin.import_tasks: upload_zip.yml
+
+- name: Restore NFS directory
+  ansible.builtin.import_tasks: nfs.yml
+
+- name: Restore PostgreSQL database
+  ansible.builtin.import_tasks: db.yml

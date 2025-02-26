@@ -1,0 +1,26 @@
+---
+- name: Set up Docker registry and push images if docker_images is provided
+  include_tasks: setup_registry.yml
+  when: 
+    - docker_images is defined and docker_images | length > 0
+    - ansible_host_private_ip == shared_file_system.private_ip
+
+- name: Configure nodes to trust local Docker registry
+  include_tasks: configure_nodes.yml
+  when: 
+    - docker_images is defined and docker_images | length > 0
+
+- name: Push Docker images if docker_images is provided
+  include_tasks: push_images.yml
+  when: 
+    - docker_images is defined and docker_images | length > 0
+    - ansible_host_private_ip == shared_file_system.private_ip
+
+- name: Update variables for using remote docker registry
+  when: 
+    - docker_images is not defined or docker_images | length == 0
+  set_fact:
+    docker_registry_username: "thirdaiplatform-pull-{{ platform_image_branch | replace('_', '-') }}"
+    docker_registry_password: "{{ cluster_config.docker_registry_password | default('5Di/+qW2Q/++3mp0Ah/rkCq33n2N7f0E8G4+cSHnub+ACRClJvCj') }}"
+    docker_registry_name: "thirdaiplatform.azurecr.io"
+    thirdai_platform_version: "{{ thirdai_platform_version }}"

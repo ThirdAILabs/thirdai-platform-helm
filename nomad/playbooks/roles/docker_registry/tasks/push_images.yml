@@ -1,0 +1,31 @@
+---
+- name: Push Images to Local Docker Registry
+  block:
+    - name: Load Docker images from local tar files and tag them
+      shell: |
+        for img in {{ docker_images }}/*.tar; do
+          echo "Processing image: $img"
+          output=$(docker load -i "$img")
+          repo_tag=$(echo "$output" | grep -oP 'Loaded image: \K.*')
+          repo_name=$(echo "$repo_tag" | cut -d':' -f1)
+          tag=$(echo "$repo_tag" | cut -d':' -f2)
+          base_name=$(basename "$repo_name")
+          echo "Tagging image $repo_name:$tag as {{ shared_file_system.private_ip }}:5000/$base_name:$tag"
+          docker tag "$repo_name:$tag" {{ shared_file_system.private_ip }}:5000/"$base_name:$tag"
+        done
+      args:
+        executable: /bin/bash
+
+    - name: Push Docker images to the local registry
+      shell: |
+        for img in {{ docker_images }}/*.tar; do
+          echo "Processing image: $img"
+          output=$(docker load -i "$img")
+          repo_tag=$(echo "$output" | grep -oP 'Loaded image: \K.*')
+          tag=$(echo "$repo_tag" | cut -d':' -f2)
+          base_name=$(basename "$repo_tag" | cut -d':' -f1)
+          echo "Pushing image {{ shared_file_system.private_ip }}:5000/$base_name:$tag"
+          docker push {{ shared_file_system.private_ip }}:5000/"$base_name:$tag"
+        done
+      args:
+        executable: /bin/bash

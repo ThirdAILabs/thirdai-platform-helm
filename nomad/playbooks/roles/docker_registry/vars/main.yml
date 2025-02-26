@@ -1,0 +1,4 @@
+---
+docker_registry_username: "thirdai"
+docker_registry_password: "thirdai"
+docker_registry_name: "{{ shared_file_system.private_ip }}:5000"

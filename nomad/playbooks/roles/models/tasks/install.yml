@@ -1,0 +1,20 @@
+---
+- name: Install rsync for using Synchronize for models
+  block:
+    - name: Install rsync on Debian/Ubuntu
+      ansible.builtin.apt:
+        name: rsync
+        state: present
+      when: ansible_pkg_mgr == "apt"
+
+    - name: Install rsync on Red Hat-based systems
+      ansible.builtin.dnf:
+        name: rsync
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+
+    - name: Install rsync on Amazon Linux 2
+      ansible.builtin.yum:
+        name: rsync
+        state: present
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"

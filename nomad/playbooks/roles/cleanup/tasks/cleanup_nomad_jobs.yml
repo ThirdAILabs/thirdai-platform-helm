@@ -1,0 +1,132 @@
+- name: Import Docker Container Variables
+  ansible.builtin.include_tasks: "../../docker_registry/tasks/main.yml"
+
+- name: Get ACL and Management tokens
+  block:
+    - name: Check if the access token file exists
+      stat:
+        path: "/opt/thirdai_platform/nomad_data/task_runner_token.txt"
+      register: token_file_stat
+
+    - name: Retrieve the Nomad ACL token
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep 'Secret ID' "/opt/thirdai_platform/nomad_data/task_runner_token.txt" | awk '{print $NF}'
+      register: acl_token
+      args:
+        executable: /bin/bash
+      when: token_file_stat.stat.exists
+      changed_when: false
+
+    - name: Check if the management token file exists
+      stat:
+        path: "/opt/thirdai_platform/nomad_data/management_token.txt"
+      register: management_file_stat
+
+    - name: Retrieve the Nomad Management token
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep 'Secret ID' "/opt/thirdai_platform/nomad_data/management_token.txt" | awk '{print $NF}'
+      register: management_token
+      args:
+        executable: /bin/bash
+      when: management_file_stat.stat.exists
+      changed_when: false
+
+- name: Stop and remove all existing Nomad jobs
+  when: token_file_stat.stat.exists
+  block:
+    - name: Get list of all running Nomad jobs
+      ansible.builtin.uri:
+        url: "http://localhost:4646/v1/jobs"
+        method: GET
+        headers:
+          Content-Type: "application/json"
+          X-Nomad-Token: "{{ acl_token.stdout }}"
+        return_content: true
+      register: jobs_list
+      failed_when: jobs_list.status != 200
+
+    - name: Extract job names from response
+      ansible.builtin.set_fact:
+        job_names: "{{ jobs_list.json | map(attribute='ID') | list }}"
+
+    - name: Stop and purge each Nomad job
+      ansible.builtin.uri:
+        url: "http://localhost:4646/v1/job/{{ item }}?purge=true"
+        method: DELETE
+        headers:
+          Content-Type: "application/json"
+          X-Nomad-Token: "{{ acl_token.stdout }}"
+        return_content: true
+      loop: "{{ job_names }}"
+      register: purge_responses
+      failed_when: purge_responses.status != 200
+
+    - name: Log purge failures
+      ansible.builtin.fail:
+        msg: "Failed to purge Nomad job {{ item }}. Error: {{ purge_responses.results }}"
+      when: item.status != 200
+      loop: "{{ purge_responses.results }}"
+      loop_control:
+        loop_var: item
+
+- name: Trigger Nomad garbage collection
+  when: management_file_stat.stat.exists
+  ansible.builtin.uri:
+    url: "http://localhost:4646/v1/system/gc"
+    method: PUT
+    headers:
+      Content-Type: "application/json"
+      X-Nomad-Token: "{{ management_token.stdout }}"
+    return_content: true
+  register: gc_response
+  failed_when: gc_response.status != 200
+
+- name: Wait for garbage collection to complete
+  when: management_file_stat.stat.exists
+  ansible.builtin.pause:
+    seconds: 5
+
+# TODO: The unmounting steps may have to be done on all nodes, not just the nomad server node
+- name: Recursively unmount all subdirectories in allocation folders
+  shell: |
+    for alloc_dir in /opt/nomad/data/alloc/*; do
+      find "$alloc_dir" -type d | while read -r sub_dir; do
+        umount -lf "$sub_dir" || true
+      done
+    done
+  become: true
+
+- name: Force delete all allocation directories
+  ansible.builtin.command:
+    cmd: "rm -rf /opt/nomad/data/"
+  become: true
+
+- name: Confirm cleanup
+  ansible.builtin.shell: "ls -A /opt/nomad/data/alloc || echo 'Cleanup complete'"
+  register: cleanup_check
+  changed_when: false
+  failed_when: "'Cleanup complete' not in cleanup_check.stdout"
+
+- name: Cleanup temporary Nomad HCL files
+  block:
+    - name: Remove each temporary HCL file
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/traefik_job.hcl"
+        - "/tmp/model_bazaar_job.hcl"
+        - "/tmp/nomad_autoscaler_job.hcl"
+        - "/tmp/keycloak_job.hcl"
+      register: file_cleanup_result
+
+    - name: Fail if cleanup of HCL files failed
+      ansible.builtin.fail:
+        msg: "Failed to cleanup HCL files on {{ ansible_host }}. Error: {{ file_cleanup_result }}"
+      when: file_cleanup_result is failed
+
+- name: Log successful Nomad cleanup
+  ansible.builtin.debug:
+    msg: "Nomad jobs stopped and temporary files cleaned up on {{ ansible_host }}."

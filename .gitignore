@@ -184,3 +184,6 @@ terraform.tfstate*
 *.txt
 
 values.yaml
+
+ndb_enterprise_license.json
+.vscode

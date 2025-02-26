@@ -1,0 +1,54 @@
+- name: Submit Nomad jobs
+  when: ansible_host_private_ip == critical_services_ips[0]
+  block:
+    - name: Generate HCL files from templates
+      block:
+        - name: Generate HCL file from template
+          ansible.builtin.template:
+            src: "files/nomad/nomad_jobs/{{ item.hcl_file }}.tpl"
+            dest: "/tmp/{{ item.hcl_file }}"
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+            mode: "0644"
+          loop:
+            - hcl_file: "traefik_job.hcl"
+            - hcl_file: "model_bazaar_job.hcl"
+            - hcl_file: "nomad_autoscaler_job.hcl"
+            - hcl_file: "keycloak_job.hcl"
+          register: result
+          vars:
+            MAJORITY_CRITICAL_SERVICE_NODES: "{{ majority_server_nodes }}"
+
+
+        - name: Generate HCL file from template
+          ansible.builtin.template:
+            src: "files/nomad/nomad_jobs/model_bazaar_job.hcl.tpl"
+            dest: "/tmp/model_bazaar_job_init.hcl"
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+            mode: "0644"
+          register: result
+          vars:
+            MAJORITY_CRITICAL_SERVICE_NODES: "1"
+
+        - name: Fail if HCL file generation failed
+          ansible.builtin.fail:
+            msg: "Failed to generate HCL file from template on {{ ansible_host }}. Error: {{ result }}"
+          when: result is failed
+
+      rescue:
+        - name: Rollback - Remove generated HCL files
+          ansible.builtin.file:
+            path: "/tmp/{{ item.hcl_file }}"
+            state: absent
+          loop:
+            - hcl_file: "traefik_job.hcl"
+            - hcl_file: "model_bazaar_job_init.hcl"
+            - hcl_file: "model_bazaar_job.hcl"
+            - hcl_file: "nomad_autoscaler_job.hcl"
+            - hcl_file: "keycloak_job.hcl"
+          ignore_errors: true
+
+        - name: Fail playbook with error
+          ansible.builtin.fail:
+            msg: "Generation of HCL files failed and rollback performed on {{ ansible_host }}."

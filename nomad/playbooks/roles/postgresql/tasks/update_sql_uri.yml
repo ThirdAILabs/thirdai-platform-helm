@@ -1,0 +1,36 @@
+---
+- name: Set the fact of SQL URI after PostgreSQL container setup
+  ansible.builtin.set_fact:
+    sql_uri: "postgresql://{{ sql_server.username }}:{{ sql_server.database_password }}@{{ sql_server.private_ip }}:5432/modelbazaar"
+    GRAFANA_DB_URL: "postgres://{{ sql_server.username }}:{{ sql_server.database_password }}@{{ sql_server.private_ip }}:5432/grafana"
+  when: cluster_config.self_hosted_sql_server
+
+- name: Set the fact of SQL URI if not using self-hosted-sql-server
+  ansible.builtin.set_fact:
+    sql_uri: "{{ cluster_config.external_modelbazaar_db_uri }}"
+    GRAFANA_DB_URL: "{{ cluster_config.external_grafana_db_uri }}"
+  when: not cluster_config.self_hosted_sql_server
+
+- name: Update nomad-var with the determined SQL URI
+  when: 
+    - ansible_host_private_ip == critical_services_ips[0]
+  block:
+    - name: Update SQL URI in nomad-var
+      ansible.builtin.shell: |
+        set -o pipefail
+        management_token=$(grep 'Secret ID' "/opt/thirdai_platform/nomad_data/management_token.txt"  | awk '{print $NF}')
+        nomad var get -namespace default -token "$management_token" nomad/jobs | \
+        nomad var put -namespace default -token "$management_token" -in=json -out=table - sql_uri={{ sql_uri }} > /dev/null
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: result
+
+    - name: Fail if updating SQL URI failed
+      ansible.builtin.fail:
+        msg: "Failed to update SQL URI in Nomad on {{ ansible_host }}."
+      when: result is failed
+  rescue:
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Updating SQL URI in Nomad failed on {{ ansible_host }}."

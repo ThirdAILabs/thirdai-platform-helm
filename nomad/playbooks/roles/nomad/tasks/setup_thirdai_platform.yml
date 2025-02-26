@@ -1,0 +1,54 @@
+---
+- name: Create directory for ThirdAI Platform scripts
+  block:
+    - name: Create directory for ThirdAI Platform scripts
+      ansible.builtin.file:
+        path: /opt/thirdai_platform/nomad
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      register: result
+
+    - name: Fail if directory creation failed
+      ansible.builtin.fail:
+        msg: "Failed to create directory /opt/thirdai_platform/nomad on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove directory if creation failed
+      ansible.builtin.file:
+        path: /opt/thirdai_platform/nomad
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Creation of directory /opt/thirdai_platform/nomad failed and rollback performed on {{ ansible_host }}."
+
+- name: Copy ThirdAI Platform scripts to target machine
+  block:
+    - name: Copy ThirdAI Platform scripts to target machine
+      ansible.builtin.copy:
+        src: "files/nomad/"
+        dest: "/opt/thirdai_platform/nomad/"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      register: result
+
+    - name: Fail if script copy failed
+      ansible.builtin.fail:
+        msg: "Failed to copy ThirdAI Platform scripts to {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+
+  rescue:
+    - name: Rollback - Remove copied scripts if copy failed
+      ansible.builtin.file:
+        path: "/opt/thirdai_platform/nomad/"
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Copying ThirdAI Platform scripts failed and rollback performed on {{ ansible_host }}."

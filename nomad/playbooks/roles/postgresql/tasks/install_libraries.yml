@@ -1,0 +1,44 @@
+---
+- name: Install required packages
+  block:
+    - name: Install psycopg2 on Ubuntu
+      ansible.builtin.apt:
+        name: python3-psycopg2
+        state: present
+      when: ansible_pkg_mgr == "apt"
+      become: true
+      register: result_apt
+
+    - name: Install psycopg2 package on Amazon Linux 2023
+      ansible.builtin.dnf:
+        name: python3-psycopg2
+        state: present
+      when: ansible_pkg_mgr == "dnf"
+      become: true
+      register: result_dnf
+    
+    - name: Install requests, urllib3<2.0 and psycopg2 on Amazon linux 2
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      become: true
+      block:
+        - name: Ensure Python pip is installed on Amazon Linux 2
+          ansible.builtin.command:
+            cmd: yum install -y python-pip
+      
+        - name: Install libraries on Amazon Linux 2
+          ansible.builtin.pip:
+            name: "{{ item }}"
+            state: present
+          loop: 
+            - requests
+            - "urllib3<2.0"
+            - psycopg2-binary
+          register: result_yum
+
+    - name: Fail if installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install libraries on {{ ansible_host }}"
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)

@@ -1,0 +1,8 @@
+- name: Install Vault
+  ansible.builtin.import_tasks: install_vault.yml
+
+- name: Configure Vault
+  ansible.builtin.import_tasks: configure_vault.yml
+
+- name: Unseal Vault
+  ansible.builtin.import_tasks: unseal_vault.yml

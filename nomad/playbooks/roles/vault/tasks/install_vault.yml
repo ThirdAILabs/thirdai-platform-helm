@@ -1,0 +1,93 @@
+---
+- name: Install Vault
+  when: ansible_host_private_ip in critical_services_ips  
+  block:
+    - name: Install Vault on Ubuntu
+      ansible.builtin.shell: |
+        set -o pipefail
+        sudo apt-get install -y gpg coreutils gnupg
+        keyring_file="/usr/share/keyrings/hashicorp-archive-keyring.gpg"
+        if [ -f "$keyring_file" ]; then
+          sudo rm "$keyring_file"
+        fi
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o "$keyring_file"
+        echo "deb [signed-by=$keyring_file] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt-get update && sudo apt-get install -y vault
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "apt"
+      register: result_apt
+      changed_when: false
+
+    - name: Install Vault on Amazon Linux 2023
+      ansible.builtin.shell: |
+        set -o pipefail
+        sudo dnf -y install dnf-plugins-core
+        sudo dnf config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+        sudo dnf -y install vault
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "dnf"
+      register: result_dnf
+      changed_when: false
+
+    - name: Install Vault on Amazon Linux 2
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      block:
+        - name: Install prerequisites for Vault on Amazon Linux 2
+          ansible.builtin.command: yum install -y yum-utils
+
+        - name: Add HashiCorp repository for Amazon Linux 2
+          ansible.builtin.shell: |
+            sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+          args:
+            executable: /bin/bash
+
+        - name: Install Vault on Amazon Linux 2
+          ansible.builtin.command: yum install -y vault
+          register: result_yum
+
+        - name: Fail if Vault installation failed on Amazon Linux 2
+          ansible.builtin.fail:
+            msg: "Failed to install Vault on {{ ansible_host }}. Error: {{ result_yum }}"
+          when: result_yum is failed
+
+    - name: Fail if Vault installation failed
+      ansible.builtin.fail:
+        msg: "Failed to install Vault on {{ ansible_host }}. Error: {{ result }}"
+      when:
+        - (ansible_pkg_mgr == "apt" and result_apt is failed) or
+          (ansible_pkg_mgr == "dnf" and result_dnf is failed) or
+          (ansible_distribution == "Amazon" and ansible_distribution_version == "2" and result_yum is failed)
+
+  rescue:
+    - name: Rollback - Remove Vault and related packages if installation failed on Ubuntu
+      ansible.builtin.shell: |
+        sudo apt-get purge -y vault gpg coreutils gnupg
+        sudo rm -rf /etc/apt/sources.list.d/hashicorp.list /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "apt"
+      ignore_errors: true
+
+    - name: Rollback - Remove Vault and related packages if installation failed on Amazon Linux 2023
+      ansible.builtin.shell: |
+        sudo dnf remove -y vault dnf-plugins-core
+        sudo rm -f /etc/yum.repos.d/hashicorp.repo
+      args:
+        executable: /bin/bash
+      when: ansible_pkg_mgr == "dnf"
+      ignore_errors: true
+
+    - name: Rollback - Remove Vault and related packages if installation failed on Amazon Linux 2
+      ansible.builtin.shell: |
+        sudo yum remove -y vault yum-utils
+        sudo rm -f /etc/yum.repos.d/hashicorp.repo
+      args:
+        executable: /bin/bash
+      when: ansible_distribution == "Amazon" and ansible_distribution_version == "2"
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Installation of Vault failed and rollback performed on {{ ansible_host }}."

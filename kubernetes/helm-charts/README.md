@@ -38,7 +38,7 @@ kubectl get ingress -n kube-system
 ```
 confirm HTTPS is working:
 ```sh
-curl -k https://<LoadBalancer-IP-or-Hostname>/api/health
+curl -k https://<LoadBalancer-IP-or-Hostname>/api/v2/health
 ```
 
 ## Customizing Deployment

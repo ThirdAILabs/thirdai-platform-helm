@@ -1,0 +1,15 @@
+---
+- name: Install prerequisites (wget, Docker)
+  ansible.builtin.import_tasks: install_prerequisites.yml
+
+- name: Install Nomad
+  ansible.builtin.import_tasks: install_nomad.yml
+
+- name: Set up ThirdAI Platform environment
+  ansible.builtin.import_tasks: setup_thirdai_platform.yml
+
+- name: Manage Nomad services (server and client)
+  ansible.builtin.import_tasks: manage_nomad_services.yml
+
+- name: Bootstrap ACL system
+  ansible.builtin.import_tasks: bootstrap_acl.yml

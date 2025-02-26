@@ -1,0 +1,31 @@
+---
+- name: Update the telemetry node file 
+  when: nfs_clients | length > 0
+  block:
+    - name: Check if client.yaml file exists
+      ansible.builtin.stat:
+        path: "{{ shared_file_system.shared_dir }}/nomad-monitoring/nomad_nodes/client.yaml"
+      register: src_file_status
+
+    - name: Load the existing node file if it exists
+      ansible.builtin.slurp:
+        src: "{{ shared_file_system.shared_dir}}/nomad-monitoring/nomad_nodes/client.yaml"
+      when: src_file_status.stat.exists
+      register: existing_yaml_content
+    
+    - name: Modify the existing YAML content by adding new client nodes and dump it.
+      ansible.builtin.copy:
+        dest: "{{ shared_file_system.shared_dir }}/nomad-monitoring/nomad_nodes/client.yaml"
+        content: |
+          {% set existing_targets = (existing_yaml_content.content | b64decode | from_yaml)[0].targets if src_file_status.stat.exists else [] -%}
+          {%- set new_targets = existing_targets + (nfs_clients | map(attribute='private_ip') | map('regex_replace', '^(.+)$', '\\1:4646') | list) -%}
+          {{ [{"targets": new_targets}] | to_yaml() }}
+        owner: "root"
+        group: nomad_nfs
+        mode: "0755"
+      register: result
+    
+    - name: Fail if updating prometheus node file failed
+      ansible.builtin.fail:
+        msg: "Failed to update the telemetry node file on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed

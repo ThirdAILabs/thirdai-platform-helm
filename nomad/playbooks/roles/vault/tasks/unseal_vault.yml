@@ -1,0 +1,104 @@
+- name: Unseal Vault
+  when: ansible_host_private_ip in critical_services_ips
+  block:
+    - name: Parse unseal keys and root token from init output
+      when: vault_init_data is defined
+      set_fact:
+        unseal_keys: "{{ vault_init_data.unseal_keys_hex }}"
+        root_token: "{{ vault_init_data.root_token }}"
+
+    - name: Check Vault status
+      command: "vault status -address=http://127.0.0.1:8200 -format=json"
+      register: vault_status_output
+      failed_when: vault_status_output.rc not in [0, 2]
+
+    - name: Parse Vault status JSON
+      set_fact:
+        vault_status: "{{ vault_status_output.stdout | from_json }}"
+
+    - name: Unseal Vault with key 1
+      command: "vault operator unseal -address=http://127.0.0.1:8200 {{ unseal_keys[0] }}"
+      register: unseal_out
+      ignore_errors: yes
+      until: unseal_out.rc == 0
+      retries: 10
+      delay: 5
+      when: vault_status.sealed
+
+    - name: Set up Vault policies and roles
+      when: ansible_host_private_ip == critical_services_ips[0]
+      block:
+        - name: Create directory for policies
+          file:
+            path: /etc/vault.d/policies
+            state: directory
+            recurse: yes
+            owner: vault
+            group: vault
+            
+        - name: Copy policy files
+          copy:
+            src: "{{ item.src }}"
+            dest: "/etc/vault.d/policies/{{ item.dest }}"
+            mode: "0640"
+          loop:
+            - { src: "nomad-cluster-policy.hcl", dest: "nomad-cluster-policy.hcl" }
+            - { src: "nomad-platform-policy.hcl", dest: "nomad-platform-policy.hcl" }
+
+        - name: Create Nomad Cluster policy
+          command: sudo -E vault policy write nomad-cluster /etc/vault.d/policies/nomad-cluster-policy.hcl
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:8200"
+            VAULT_TOKEN: "{{ root_token }}"
+          register: create_nomad_policy
+          ignore_errors: yes
+          until: create_nomad_policy.rc == 0
+          retries: 10
+          delay: 5
+
+        - name: Create Nomad Platform policy
+          command: sudo -E vault policy write nomad-platform /etc/vault.d/policies/nomad-platform-policy.hcl
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:8200"
+            VAULT_TOKEN: "{{ root_token }}"
+
+        - name: Create directory for policies
+          file:
+            path: /opt/vault/roles
+            state: directory
+            recurse: yes
+            owner: vault
+            group: vault
+        
+        - name: Create Nomad Cluster role
+          command: sudo -E vault write auth/token/roles/nomad-cluster \
+            allowed_policies="nomad-cluster,nomad-platform"
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:8200"
+            VAULT_TOKEN: "{{ root_token }}"
+
+        - name: Generate Nomad Vault token
+          command: sudo -E vault token create -role="nomad-cluster" -format=json
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:8200"
+            VAULT_TOKEN: "{{ root_token }}"
+          register: nomad_vault_token_response
+
+        - name: Set fact for Nomad Vault token
+          set_fact:
+            nomad_vault_token: "{{ nomad_vault_token_response.stdout | from_json | json_query('auth.client_token') }}"
+
+        - name: Store Nomad Vault token in a secure file
+          copy:
+            content: "{{ nomad_vault_token }}"
+            dest: /etc/vault.d/nomad_vault_token.txt
+            mode: "0600"
+            owner: vault
+            group: vault
+
+        - name: Generate Nomad Vault token
+          command: sudo -E vault secrets enable -path=secrets -version=2 kv
+          failed_when: vault_status_output.rc not in [0, 2]
+          environment:
+            VAULT_ADDR: "http://127.0.0.1:8200"
+            VAULT_TOKEN: "{{ root_token }}"

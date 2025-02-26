@@ -1,0 +1,68 @@
+---
+- name: Write node status to NFS with correct permissions
+  block:
+    - name: Ensure the file exists with correct ownership and permissions
+      ansible.builtin.file:
+        path: "{{ shared_file_system.shared_dir }}/node_status"
+        state: touch
+        owner: "root"
+        group: "nomad_nfs"
+        mode: '0664'
+      when: ansible_host_private_ip == shared_file_system.private_ip
+      tags: result
+
+    - name: Append node status to the NFS file
+      ansible.builtin.lineinfile:
+        path: "{{ shared_file_system.shared_dir }}/node_status"
+        line: "{{ inventory_hostname }} | success"
+        create: yes
+      become: true
+      throttle: 1  # Ensures only one host executes this task at a time
+      tags: result
+
+    - name: Fail if writing node status failed
+      ansible.builtin.fail:
+        msg: "Failed to write node status to NFS on {{ ansible_host }}."
+      when: result is failed
+  rescue:
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Writing node status to NFS failed on {{ ansible_host }}."
+
+
+- name: Verify NFS status on all nodes
+  block:
+    - name: Verify NFS status for all nodes
+      ansible.builtin.shell: |
+        for host in {{ ansible_play_hosts | join(' ') }}; do
+          grep -q "$host | success" {{ shared_file_system.shared_dir }}/node_status || echo "$host | failed"
+        done
+      register: nfs_status_check
+      failed_when: "'failed' in nfs_status_check.stdout"
+      changed_when: false
+      tags: nfs_status_check
+
+    - name: Fail if NFS status verification failed
+      ansible.builtin.fail:
+        msg: "NFS status verification failed on {{ ansible_host }}. Error: {{ nfs_status_check }}"
+      when: nfs_status_check is failed
+  rescue:
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Verifying NFS status failed on {{ ansible_host }}."
+
+- name: Clean up status file on NFS
+  when: ansible_play_hosts[-1] == ansible_host
+  block:
+    - name: Clean up status file on NFS
+      ansible.builtin.command: sudo rm -f {{ shared_file_system.shared_dir }}/node_status
+      changed_when: true
+
+    - name: Fail if cleanup of status file failed
+      ansible.builtin.fail:
+        msg: "Failed to clean up status file on NFS on {{ ansible_host }}. Error: {{ result }}"
+      when: result is failed
+  rescue:
+    - name: Fail the playbook with an error message
+      ansible.builtin.fail:
+        msg: "Cleanup of status file on NFS failed on {{ ansible_host }}."

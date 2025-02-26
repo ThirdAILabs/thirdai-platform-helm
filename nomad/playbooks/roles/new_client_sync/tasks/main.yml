@@ -1,0 +1,12 @@
+---
+- name: Update the sql-server to allow access to new client nodes
+  ansible.builtin.import_tasks: update_postgres_container.yml
+  when: 
+    - cluster_config.self_hosted_sql_server
+    - ansible_host_private_ip == sql_server.private_ip
+
+- name: Update the nfs-server to allow access to new client nodes
+  ansible.builtin.import_tasks: update_nfs_server.yml
+  when:
+    - cluster_config.create_nfs_server
+    - ansible_host_private_ip == shared_file_system.private_ip

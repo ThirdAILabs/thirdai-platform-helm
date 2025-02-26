@@ -1,0 +1,46 @@
+---
+- name: Update Docker Daemon Json
+  become: yes
+  block:
+    - name: Load JSON file
+      slurp:
+        src: /etc/docker/daemon.json
+      register: imported_var
+      failed_when: imported_var is not defined
+
+    - name: Decode and parse JSON
+      set_fact:
+        json_data: "{{ imported_var.content | b64decode | from_json | default({}) }}"
+
+    - name: Add Insecure Registries to JSON
+      set_fact:
+        updated_json: >-
+          {{
+            json_data | combine({
+              'insecure-registries': 
+                (json_data['insecure-registries'] | default([]) + ['{{ shared_file_system.private_ip }}:5000']) | unique
+            })
+          }}
+
+    - name: Write updated JSON back to file
+      copy:
+        content: "{{ updated_json | to_nice_json }}"
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+
+
+- name: Restart Docker service to apply configuration
+  systemd:
+    name: docker
+    state: restarted
+
+- name: Wait for Docker registry to start
+  wait_for:
+    port: 5000
+    host: "{{ shared_file_system.private_ip }}"
+    delay: 10
+
+- name: Log in to the Docker registry
+  shell: "docker login -u {{ docker_registry_username }} -p {{ docker_registry_password }} {{ shared_file_system.private_ip }}:5000"
+  args:
+    executable: /bin/bash

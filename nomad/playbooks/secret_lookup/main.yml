@@ -1,0 +1,25 @@
+---
+- name: Aws secret lookup
+  ansible.builtin.import_tasks: aws_secret_lookup.yml
+  when: aws_secret_name is defined
+
+- name: Secret lookup in config file
+  ansible.builtin.import_tasks: file_lookup.yml
+  when: aws_secret_name is not defined
+
+- name: User Prompting for secrets
+  ansible.builtin.import_tasks: user_input.yml
+  when: 
+    - aws_secret_name is not defined
+    - not has_file_all_secrets
+
+- name: Validate that the secret is defined and non-empty
+  ansible.builtin.assert:
+    that:
+      - "secrets[item] is defined"
+      - "secrets[item] | string | length != 0"
+    msg: "{{ item }} is not defined or empty"
+  loop:
+    - admin_mail
+    - admin_username
+    - admin_password

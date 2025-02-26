@@ -1,0 +1,127 @@
+---
+- name: Gather service facts
+  ansible.builtin.service_facts:
+
+- name: Stop Consul service
+  ansible.builtin.systemd:
+    name: consul
+    state: stopped
+    enabled: no
+  ignore_errors: true
+  tags: cleanup
+
+- name: Disable Consul service
+  ansible.builtin.systemd:
+    name: consul
+    enabled: no
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove Consul systemd service file
+  ansible.builtin.file:
+    path: /etc/systemd/system/consul.service
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Reload systemd to apply changes
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove Consul configuration directory
+  ansible.builtin.file:
+    path: /etc/consul.d
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove Consul data directory
+  ansible.builtin.file:
+    path: /opt/consul/data
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove Consul DNS systemd-resolved configuration
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d/consul.conf
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Get systemd version
+  ansible.builtin.command: systemctl --version | head -n1
+  register: systemd_version_output
+
+- name: Parse systemd version
+  set_fact:
+    systemd_version: "{{ systemd_version_output.stdout.split()[1] }}"
+
+- name: Remove iptables DNS UDP redirection rule
+  ansible.builtin.iptables:
+    chain: OUTPUT
+    table: nat
+    protocol: udp
+    destination: 127.0.0.1
+    destination_port: 53
+    jump: REDIRECT
+    to_ports: 8600
+    state: absent
+  when: (systemd_version | int) < 246
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove iptables DNS TCP redirection rule
+  ansible.builtin.iptables:
+    chain: OUTPUT
+    table: nat
+    protocol: tcp
+    destination: 127.0.0.1
+    destination_port: 53
+    jump: REDIRECT
+    to_ports: 8600
+    state: absent
+  when: (systemd_version | int) < 246
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove iptables rules persistence (Debian-based)
+  when:
+    - (systemd_version | int) < 246
+    - ansible_os_family == "Debian"
+  ansible.builtin.command: netfilter-persistent save
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove systemd-resolved Consul DNS configuration directory
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: absent
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove Consul binary (if present)
+  ansible.builtin.file:
+    path: "{{ consul_binary_path.stdout }}"
+    state: absent
+  when: consul_binary_path is defined and consul_binary_path.stdout != ""
+  ignore_errors: true
+  tags: cleanup
+
+- name: Remove residual Consul directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/consul
+    - /opt/consul
+    - /var/log/consul
+  ignore_errors: true
+  tags: cleanup
+
+- name: Confirm Consul cleanup completion
+  ansible.builtin.debug:
+    msg: "Consul and all related services, configurations, and files have been successfully cleaned up on {{ ansible_host }}."
+  tags: cleanup

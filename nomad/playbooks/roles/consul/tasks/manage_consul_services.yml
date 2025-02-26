@@ -1,0 +1,189 @@
+---
+- name: Set consul_bootstrap_expect variable
+  ansible.builtin.set_fact:
+    consul_bootstrap_expect: "{{ critical_services_ips | length }}"
+
+- name: Set is_server variable
+  ansible.builtin.set_fact:
+    is_server: "{{ ansible_host_private_ip in critical_services_ips }}"
+
+- name: Configure Consul on all nodes
+  block:
+    - name: Find Consul binary path
+      ansible.builtin.command: which consul
+      register: consul_binary_path
+      failed_when: consul_binary_path.rc != 0
+
+    - name: Create Consul configuration directory
+      ansible.builtin.file:
+        path: "/etc/consul.d/"
+        state: directory
+        mode: "0755"
+
+    - name: Generate Consul configuration file
+      ansible.builtin.template:
+        src: templates/consul.hcl.j2
+        dest: /etc/consul.d/consul.hcl
+        mode: "0644"
+      vars:
+        consul_bind_addr: "{{ ansible_host_private_ip }}"
+        consul_client_addr: "0.0.0.0"
+        consul_bootstrap_expect: "{{ consul_bootstrap_expect }}"
+        consul_retry_join: "{{ critical_services_ips }}"
+        is_server: "{{ is_server }}"
+
+    - name: Install Consul systemd service
+      ansible.builtin.template:
+        src: templates/consul.service.j2
+        dest: /etc/systemd/system/consul.service
+        mode: "0644"
+      vars:
+        consul_bin_path: "{{ consul_binary_path.stdout }}"
+
+    - name: Reload systemd to recognize the Consul service
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Start and enable Consul via systemd
+      ansible.builtin.systemd:
+        name: consul
+        state: restarted
+        enabled: yes
+
+  rescue:
+    - name: Rollback - Stop Consul if start failed
+      ansible.builtin.systemd:
+        name: consul
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Remove Consul systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/consul.service
+        state: absent
+      ignore_errors: true
+
+    - name: Fail playbook with error
+      ansible.builtin.fail:
+        msg: "Starting Consul failed and rollback performed on {{ ansible_host }}."
+
+- name: Update DNS to forward Consul DNS requests to Consul DNS server
+  block:
+    - name: Determine if systemd-resolved is available
+      ansible.builtin.service_facts:
+
+    - name: Set variable use_systemd_resolved
+      set_fact:
+        use_systemd_resolved: "{{ 'systemd-resolved.service' in services }}"
+
+    - name: Configure DNS forwarding using systemd-resolved
+      when: use_systemd_resolved
+      block:
+        - name: Get systemd version
+          ansible.builtin.command: systemctl --version | head -n1
+          register: systemd_version_output
+
+        - name: Parse systemd version
+          set_fact:
+            systemd_version: "{{ systemd_version_output.stdout.split()[1] }}"
+            systemd_min_version_for_port_spec: 246
+
+        - name: Create systemd-resolved Consul DNS configuration based on systemd version
+          block:
+            - name: Ensure /etc/systemd/resolved.conf.d directory exists
+              ansible.builtin.file:
+                path: /etc/systemd/resolved.conf.d
+                state: directory
+                mode: "0755"
+
+            - name: Create Consul DNS configuration for systemd 246+
+              ansible.builtin.copy:
+                dest: /etc/systemd/resolved.conf.d/consul.conf
+                content: |
+                  [Resolve]
+                  DNS=127.0.0.1:8600
+                  DNSSEC=no
+                  Domains=~consul
+                mode: "0644"
+              when: (systemd_version | int) >= systemd_min_version_for_port_spec
+
+            - name: Create Consul DNS configuration for systemd 245 and older
+              ansible.builtin.copy:
+                dest: /etc/systemd/resolved.conf.d/consul.conf
+                content: |
+                  [Resolve]
+                  DNS=127.0.0.1
+                  DNSSEC=no
+                  Domains=~consul
+                mode: "0644"
+              when: (systemd_version | int) < systemd_min_version_for_port_spec
+
+        - name: Ensure systemd-resolved is enabled and started
+          ansible.builtin.systemd:
+            name: systemd-resolved
+            enabled: yes
+            state: restarted
+
+        - name: Set up iptables DNS redirection for systemd 245 and older
+          when: (systemd_version | int) < systemd_min_version_for_port_spec
+          block:
+            - name: Redirect DNS UDP traffic from port 53 to Consul's DNS port 8600
+              ansible.builtin.iptables:
+                chain: OUTPUT
+                table: nat
+                protocol: udp
+                destination: 127.0.0.1
+                destination_port: 53
+                jump: REDIRECT
+                to_ports: 8600
+                state: present
+
+            - name: Redirect DNS TCP traffic from port 53 to Consul's DNS port 8600
+              ansible.builtin.iptables:
+                chain: OUTPUT
+                table: nat
+                protocol: tcp
+                destination: 127.0.0.1
+                destination_port: 53
+                jump: REDIRECT
+                to_ports: 8600
+                state: present
+
+            - name: Save iptables rules (Debian-based)
+              ansible.builtin.command: netfilter-persistent save
+              when: ansible_os_family == "Debian"
+
+    - name: Configure DNS forwarding using dnsmasq (Amazon Linux 2)
+      when: not use_systemd_resolved
+      block:
+        - name: Install dnsmasq
+          ansible.builtin.yum:
+            name: dnsmasq
+            state: present
+
+        - name: Configure dnsmasq to forward .consul domain to Consul
+          ansible.builtin.copy:
+            dest: /etc/dnsmasq.d/10-consul
+            content: |
+              server=/consul/127.0.0.1#8600
+            mode: "0644"
+
+        - name: Ensure dnsmasq is enabled and started
+          ansible.builtin.service:
+            name: dnsmasq
+            enabled: yes
+            state: restarted
+
+        - name: Configure resolv.conf to use dnsmasq
+          lineinfile:
+            path: /etc/resolv.conf
+            line: "nameserver 127.0.0.1"
+            insertafter: BOF
+
+        - name: Configure dhclient to dont overwrite resolv.conf
+          blockinfile:
+            path: /etc/dhcp/dhclient.conf
+            block: |
+              supersede domain-name-servers 127.0.0.1;
+            create: true

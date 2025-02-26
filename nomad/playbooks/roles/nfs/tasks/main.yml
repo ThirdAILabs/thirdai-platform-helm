@@ -1,0 +1,22 @@
+---
+- name: Import NFS setup tasks for all
+  ansible.builtin.import_tasks: setup_all.yml
+
+- name: Import NFS setup tasks for server
+  ansible.builtin.import_tasks: setup_server.yml
+  when: 
+    - ansible_host_private_ip == shared_file_system.private_ip
+
+- name: Import NFS server configuration tasks
+  ansible.builtin.import_tasks: server.yml
+  when: 
+    - ansible_host_private_ip == shared_file_system.private_ip
+
+- name: Import NFS client configuration tasks
+  ansible.builtin.import_tasks: client.yml
+  when: 
+    - ansible_host_private_ip != shared_file_system.private_ip
+    - cluster_config.create_nfs_server
+
+- name: Check if nfs is working without any issue
+  ansible.builtin.import_tasks: check_nfs_working.yml

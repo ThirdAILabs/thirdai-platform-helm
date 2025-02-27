@@ -271,7 +271,6 @@ resource "aws_efs_backup_policy" "thirdai_platform_efs_backup" {
   }
 }
 
-# TODO(pratik): Use different DB for each of the uri
 resource "local_file" "deployment_config" {
   filename = "${path.module}/deployment_config.txt"
   content  = <<EOF

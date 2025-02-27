@@ -6,9 +6,9 @@ vpc_id               = "vpc-xxx"                    # Replace with your VPC ID
 private_subnets      = ["subnet-xxx", "subnet-xxx"] # Replace with your private subnet IDs
 private_subnets_cidr = ["xxxx", "xxxx"]             # CIDRs for the private subnets
 
-node_group_desired_capacity = 1
-node_group_max_capacity     = 4
-node_group_min_capacity     = 1
+node_group_desired_size = 1
+node_group_max_size     = 4
+node_group_min_size     = 1
 node_group_instance_types   = ["t3.medium"]
 
 # RDS Configuration

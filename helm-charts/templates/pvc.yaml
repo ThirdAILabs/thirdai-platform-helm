@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: modelbazaar-efs-pvc
+  name: model-bazaar-pvc
 spec:
-  storageClassName: {{ .Values.efs.storageClassName }}
+  volumeName: thirdai-platform-share-dir-pv
   accessModes:
     - ReadWriteMany
   resources:
     requests:
-      storage: {{ .Values.efs.size | quote }}
+      storage: 100Gi

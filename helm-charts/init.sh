@@ -95,8 +95,8 @@ export INGRESS_HOSTNAME="example.com"
 #####################################
 kubectl create secret docker-registry docker-credentials-secret \
   --docker-server=thirdaiplatform.azurecr.io \
-  --docker-username=thirdaiplatform-pull-eks-test \
-  --docker-password='+0j2ErguQ9dK+eELV7VNBWLFdDe+rF2mAXrKmGfhy9+ACRBHAhHg' \
+  --docker-username=thirdaiplatform-pull-k8s-telemetry \
+  --docker-password='R1nzrtz5V/jEzre3i3DH0HP3ujDqNekl+eMDhgCta5+ACRCMFIwJ' \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
@@ -200,6 +200,18 @@ echo "Deployment complete!"
 echo "Verify your Ingress with:"
 echo "  kubectl get ingress -n $NAMESPACE"
 
+#####################################
+# Add prometheus-community helm chart  #
+#####################################
+echo "Adding the Prometheus Community Helm repository..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
+
+echo "Updating Helm repositories..."
+helm repo update
+
+echo "Installing kube-state-metric and node-exporter Helm charts..."
+helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics -n kube-system
+helm upgrade --install node-exporter prometheus-community/prometheus-node-exporter -n kube-system
 
 #####################################
 # ADD KUBERNETES DASHBOARD HELM REPO & INSTALL CHART #

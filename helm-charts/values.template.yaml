@@ -3,8 +3,8 @@ replicaCount: 1
 
 # Docker image settings
 image:
-  repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.54"
+  repository: "thirdaiplatform.azurecr.io/thirdai_platform_k8s_telemetry"
+  tag: "v0.0.35"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret

@@ -69,9 +69,9 @@ module "eks" {
   eks_managed_node_groups = {
     main = {
       name             = "${var.cluster_name}-node-group"
-      desired_capacity = var.node_group_desired_capacity
-      max_capacity     = var.node_group_max_capacity
-      min_capacity     = var.node_group_min_capacity
+      desired_size = var.node_group_desired_size
+      max_size     = var.node_group_max_size
+      min_size     = var.node_group_min_size
       instance_types   = var.node_group_instance_types
 
       additional_tags = {
@@ -166,8 +166,66 @@ resource "aws_db_instance" "thirdai_platform_db" {
 
 locals {
   rds_endpoint = var.existing_rds_endpoint != "" ? var.existing_rds_endpoint : aws_db_instance.thirdai_platform_db[0].endpoint
+  rds_hostname = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[0] : aws_db_instance.thirdai_platform_db[0].address
+  rds_port     = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[1] : aws_db_instance.thirdai_platform_db[0].port
   rds_username = var.existing_rds_endpoint != "" ? var.existing_rds_username : var.rds_master_username
   rds_password = var.existing_rds_endpoint != "" ? var.existing_rds_password : var.rds_master_password
+}
+
+resource "aws_iam_role" "db_creator_lambda_role" {
+  name              = "db-creator-lambda-role-${random_string.unique_suffix.result}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect    = "Allow",
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
+  role       = aws_iam_role.db_creator_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_lambda_function" "create_db_lambda" {
+  filename = "create_db_lambda.zip"
+  function_name = "create-db-lambda-${random_string.unique_suffix.result}"
+  role = aws_iam_role.db_creator_lambda_role.arn
+  handler = "index.handler"
+  runtime = "nodejs18.x"
+  timeout = 60
+
+  vpc_config {
+    subnet_ids         = var.private_subnets
+    security_group_ids = [aws_security_group.thirdai_platform_sg.id]
+  }
+
+  environment {
+    variables = {
+      DB_HOST = local.rds_hostname
+      DB_PORT = local.rds_port
+      DB_USERNAME = local.rds_username
+      DB_PASSWORD = local.rds_password
+      DB_NAME = "modelbazaar"
+    }
+  }
+
+  depends_on = [ aws_db_instance.thirdai_platform_db ]
+}
+
+resource "aws_lambda_invocation" "create_additional_dbs" {
+  function_name = aws_lambda_function.create_db_lambda.function_name
+  input = jsonencode({
+    create_dbs = ["grafana", "keycloak"]
+  })
+
+  depends_on = [ aws_lambda_function.create_db_lambda ] 
 }
 
 resource "aws_efs_file_system" "thirdai_platform_efs" {
@@ -213,7 +271,6 @@ resource "aws_efs_backup_policy" "thirdai_platform_efs_backup" {
   }
 }
 
-# TODO(pratik): Use different DB for each of the uri
 resource "local_file" "deployment_config" {
   filename = "${path.module}/deployment_config.txt"
   content  = <<EOF
@@ -222,7 +279,7 @@ rds_endpoint="${local.rds_endpoint}"
 rds_username="${local.rds_username}"
 rds_password="${local.rds_password}"
 modelbazaar_db_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar"
-keycloak_db_uri="postgresql://${local.rds_endpoint}/modelbazaar"
-grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar?sslmode=require"
+keycloak_db_uri="postgresql://${local.rds_endpoint}/keycloak"
+grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/grafana?sslmode=require"
 EOF
 }

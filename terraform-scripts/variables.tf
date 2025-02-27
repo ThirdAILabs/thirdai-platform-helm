@@ -32,20 +32,20 @@ variable "private_subnets_cidr" {
   default     = []
 }
 
-variable "node_group_desired_capacity" {
-  description = "Desired capacity for the EKS managed node group"
+variable "node_group_desired_size" {
+  description = "Desired size for the EKS managed node group"
   type        = number
   default     = 1
 }
 
-variable "node_group_max_capacity" {
-  description = "Maximum capacity for the EKS managed node group"
+variable "node_group_max_size" {
+  description = "Maximum size for the EKS managed node group"
   type        = number
   default     = 4
 }
 
-variable "node_group_min_capacity" {
-  description = "Minimum capacity for the EKS managed node group"
+variable "node_group_min_size" {
+  description = "Minimum size for the EKS managed node group"
   type        = number
   default     = 1
 }

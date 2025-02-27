@@ -29,6 +29,7 @@ Ensure you have the following installed:
 - **Deploys the NGINX Ingress Controller**
 - **Generates `values.yaml` dynamically using environment variables**
 - **Deploys the Helm chart using `helm install`**
+- **Deploys the Kubernetes Cluster Autoscaler**
 
 ## Verifying Deployment
 Once the script completes, verify that the services are running:
@@ -54,7 +55,7 @@ helm uninstall thirdai-platform -n kube-system
 This will remove all resources associated with the platform.
 
 
-## Enabling Cluster Autoscaling
+## Enabling Cluster Autoscaling Manually
 Follow the instructions at the [Cluster Autoscaler repository](https://github.com/kubernetes/autoscaler/tree/master/charts/cluster-autoscaler#aws---using-auto-discovery-of-tagged-instance-groups) to enable cluster autoscaling. This will allow the dynamic addition and removal of nodes in your Kubernetes cluster.
 
 ### AWS EKS Steps

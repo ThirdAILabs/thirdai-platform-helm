@@ -4,7 +4,7 @@ replicaCount: 1
 # Docker image settings
 image:
   repository: "thirdaiplatform.azurecr.io/thirdai_platform_eks-test"
-  tag: "v0.0.54"
+  tag: "v0.0.63"
   pullPolicy: IfNotPresent
 
 # Docker credentials secret

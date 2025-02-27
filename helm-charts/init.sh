@@ -82,6 +82,11 @@ export KEYCLOAK_DB_USERNAME="$rds_username"
 export KEYCLOAK_DB_PASSWORD="$rds_password"
 export MODELBAZAAR_DB_URI="$modelbazaar_db_uri"
 export GRAFANA_DB_URL="$grafana_db_uri"
+export CLUSTER_AUTOSCALER_ROLE_NAME="$cluster_autoscaler_role_name"
+
+export CLUSTER_NAME=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}' | cut -d '/' -f2)
+export AWS_REGION=$(aws configure get region)
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 export INGRESS_HOSTNAME="example.com"
 
@@ -97,7 +102,7 @@ kubectl create secret docker-registry docker-credentials-secret \
 #####################################
 # DEPLOY NGINX INGRESS CONTROLLER   #
 #####################################
-echo "Adding the NGINX stable Helm repository..."
+echo "Adding the NGINX Helm repository..."
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>/dev/null || true
 
 echo "Updating Helm repositories..."
@@ -112,6 +117,20 @@ helm install thirdai-internal ingress-nginx/ingress-nginx -n $NAMESPACE \
   --set controller.service.type=ClusterIP \
   --set controller.ingressClass=nginx-internal \
   --wait 2>/dev/null || true
+
+#####################################
+# DEPLOY CLUSTER AUTOSCALER         #
+#####################################
+echo "Adding the Cluster Autoscaler Helm repository..."
+helm repo add autoscaler https://kubernetes.github.io/autoscaler
+
+echo "Deploying the Cluster Autoscaler..."
+helm install cluster-autoscaler autoscaler/cluster-autoscaler \
+  --namespace kube-system \
+  --set autoDiscovery.clusterName=$CLUSTER_NAME \
+  --set awsRegion=$AWS_REGION \
+  --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_AUTOSCALER_ROLE_NAME} \
+  --wait
 
 #####################################
 # TLS CERTIFICATE SETUP             #

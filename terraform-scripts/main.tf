@@ -127,6 +127,63 @@ resource "aws_security_group" "thirdai_platform_sg" {
   }
 }
 
+resource "aws_iam_role" "cluster_autoscaler_role" {
+  name = "${var.cluster_name}-autoscaler-role-${random_string.unique_suffix.result}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = module.eks.oidc_provider_arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:cluster-autoscaler",
+            "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "cluster_autoscaler_policy" {
+  name = "${var.cluster_name}-autoscaler-policy-${random_string.unique_suffix.result}"
+  role = aws_iam_role.cluster_autoscaler_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:GetInstanceTypesFromInstanceRequirements",
+          "eks:DescribeNodegroup"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_db_subnet_group" "rds_subnet" {
   name       = "rds-subnet-group-${random_string.unique_suffix.result}"
   subnet_ids = var.private_subnets
@@ -224,5 +281,6 @@ rds_password="${local.rds_password}"
 modelbazaar_db_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar"
 keycloak_db_uri="postgresql://${local.rds_endpoint}/modelbazaar"
 grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar?sslmode=require"
+cluster_autoscaler_role_name="${var.cluster_name}-autoscaler-role-${random_string.unique_suffix.result}"
 EOF
 }

@@ -68,11 +68,11 @@ module "eks" {
 
   eks_managed_node_groups = {
     main = {
-      name             = "${var.cluster_name}-node-group"
-      desired_size = var.node_group_desired_size
-      max_size     = var.node_group_max_size
-      min_size     = var.node_group_min_size
-      instance_types   = var.node_group_instance_types
+      name           = "${var.cluster_name}-node-group"
+      desired_size   = var.node_group_desired_size
+      max_size       = var.node_group_max_size
+      min_size       = var.node_group_min_size
+      instance_types = var.node_group_instance_types
 
       additional_tags = {
         Name = "${var.cluster_name}-node-group"
@@ -196,7 +196,7 @@ resource "aws_db_instance" "thirdai_platform_db" {
   count                  = var.existing_rds_endpoint != "" ? 0 : 1
   allocated_storage      = var.rds_storage_size_gb
   engine                 = "postgres"
-  engine_version         = "14.12"
+  engine_version         = "14.17"
   instance_class         = var.rds_instance_class
   db_name                = "modelbazaar"
   identifier             = "${var.cluster_name}-rds-${random_string.unique_suffix.result}"
@@ -229,13 +229,13 @@ locals {
 }
 
 resource "aws_iam_role" "db_creator_lambda_role" {
-  name              = "db-creator-lambda-role-${random_string.unique_suffix.result}"
+  name = "db-creator-lambda-role-${random_string.unique_suffix.result}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
         Action = "sts:AssumeRole",
-        Effect    = "Allow",
+        Effect = "Allow",
         Principal = {
           Service = "lambda.amazonaws.com"
         }
@@ -250,12 +250,12 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
 }
 
 resource "aws_lambda_function" "create_db_lambda" {
-  filename = "create_db_lambda.zip"
+  filename      = "create_db_lambda.zip"
   function_name = "create-db-lambda-${random_string.unique_suffix.result}"
-  role = aws_iam_role.db_creator_lambda_role.arn
-  handler = "index.handler"
-  runtime = "nodejs18.x"
-  timeout = 60
+  role          = aws_iam_role.db_creator_lambda_role.arn
+  handler       = "index.handler"
+  runtime       = "nodejs18.x"
+  timeout       = 60
 
   vpc_config {
     subnet_ids         = var.private_subnets
@@ -264,15 +264,15 @@ resource "aws_lambda_function" "create_db_lambda" {
 
   environment {
     variables = {
-      DB_HOST = local.rds_hostname
-      DB_PORT = local.rds_port
+      DB_HOST     = local.rds_hostname
+      DB_PORT     = local.rds_port
       DB_USERNAME = local.rds_username
       DB_PASSWORD = local.rds_password
-      DB_NAME = "modelbazaar"
+      DB_NAME     = "modelbazaar"
     }
   }
 
-  depends_on = [ aws_db_instance.thirdai_platform_db ]
+  depends_on = [aws_db_instance.thirdai_platform_db]
 }
 
 resource "aws_lambda_invocation" "create_additional_dbs" {
@@ -281,7 +281,7 @@ resource "aws_lambda_invocation" "create_additional_dbs" {
     create_dbs = ["grafana", "keycloak"]
   })
 
-  depends_on = [ aws_lambda_function.create_db_lambda ] 
+  depends_on = [aws_lambda_function.create_db_lambda]
 }
 
 resource "aws_efs_file_system" "thirdai_platform_efs" {

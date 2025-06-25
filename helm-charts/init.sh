@@ -95,8 +95,8 @@ export INGRESS_HOSTNAME="example.com"
 #####################################
 kubectl create secret docker-registry docker-credentials-secret \
   --docker-server=thirdaiplatform.azurecr.io \
-  --docker-username=thirdaiplatform-pull-k8s-telemetry \
-  --docker-password='R1nzrtz5V/jEzre3i3DH0HP3ujDqNekl+eMDhgCta5+ACRCMFIwJ' \
+  --docker-username=thirdaiplatform-pull-v2 \
+  --docker-password='JVzqhkZmSGfBjIWImO0+hApr9T4kVeSfi9CtIvkCWy+ACRD+ya71' \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 #####################################
@@ -125,11 +125,11 @@ echo "Adding the Cluster Autoscaler Helm repository..."
 helm repo add autoscaler https://kubernetes.github.io/autoscaler
 
 echo "Deploying the Cluster Autoscaler..."
-helm install cluster-autoscaler autoscaler/cluster-autoscaler \
+helm upgrade --install cluster-autoscaler autoscaler/cluster-autoscaler \
   --namespace kube-system \
-  --set autoDiscovery.clusterName=$CLUSTER_NAME \
-  --set awsRegion=$AWS_REGION \
-  --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_AUTOSCALER_ROLE_NAME} \
+  --set autoDiscovery.clusterName="$CLUSTER_NAME" \
+  --set awsRegion="$AWS_REGION" \
+  --set rbac.serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_AUTOSCALER_ROLE_NAME}" \
   --wait
 
 #####################################

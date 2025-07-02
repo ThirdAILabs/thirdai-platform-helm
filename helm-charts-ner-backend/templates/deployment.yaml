@@ -1,0 +1,124 @@
+{{- if .Values.rabbitmq.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ner-backend.fullname" . }}-rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "ner-backend.fullname" . }}-rabbitmq
+  template:
+    metadata:
+      labels:
+        app: {{ include "ner-backend.fullname" . }}-rabbitmq
+    spec:
+      containers:
+      - name: rabbitmq
+        image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+        imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.rabbitmq.service.port }}
+          - containerPort: {{ .Values.rabbitmq.service.managementPort }}
+        env:
+          - name: RABBITMQ_DEFAULT_USER
+            value: "{{ .Values.rabbitmq.credentials.username }}"
+          - name: RABBITMQ_DEFAULT_PASS
+            value: "{{ .Values.rabbitmq.credentials.password }}"
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/rabbitmq
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "ner-backend.fullname" . }}-rabbitmq
+{{- end }}
+
+{{- if .Values.api.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ner-backend.fullname" . }}-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "ner-backend.fullname" . }}-api
+  template:
+    metadata:
+      labels:
+        app: {{ include "ner-backend.fullname" . }}-api
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.dockerCredentialsSecret }}
+      containers:
+      - name: api
+        image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+        imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+        args: ["--head"]
+        ports:
+          - containerPort: {{ .Values.api.service.port }}
+        env:
+          - name: DATABASE_URL
+            value: "{{ .Values.database.url }}"
+          - name: RABBITMQ_URL
+            value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
+          - name: S3_ENDPOINT_URL
+            value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ .Values.s3.credentials.accessKey }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ .Values.s3.credentials.secretKey }}"
+        resources:
+          requests:
+            cpu: {{ .Values.api.resources.requests.cpu }}
+            memory: {{ .Values.api.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.api.resources.limits.cpu }}
+            memory: {{ .Values.api.resources.limits.memory }}
+{{- end }}
+
+{{- if .Values.worker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ner-backend.fullname" . }}-worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "ner-backend.fullname" . }}-worker
+  template:
+    metadata:
+      labels:
+        app: {{ include "ner-backend.fullname" . }}-worker
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.dockerCredentialsSecret }}
+      containers:
+      - name: worker
+        image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+        imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+        args: ["--worker"]
+        env:
+          - name: DATABASE_URL
+            value: "{{ .Values.database.url }}"
+          - name: RABBITMQ_URL
+            value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
+          - name: S3_ENDPOINT_URL
+            value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
+          - name: AWS_ACCESS_KEY_ID
+            value: "{{ .Values.s3.credentials.accessKey }}"
+          - name: AWS_SECRET_ACCESS_KEY
+            value: "{{ .Values.s3.credentials.secretKey }}"
+        resources:
+          requests:
+            cpu: {{ .Values.worker.resources.requests.cpu }}
+            memory: {{ .Values.worker.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.worker.resources.limits.cpu }}
+            memory: {{ .Values.worker.resources.limits.memory }}
+{{- end }}

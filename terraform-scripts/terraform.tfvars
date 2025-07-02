@@ -1,15 +1,15 @@
 # General cluster configuration
-aws_region           = "us-east-1"
-cluster_name         = "thirdai-eks"
+aws_region           = "us-west-1"
+cluster_name         = "ner-eks"
 cluster_version      = "1.31"
-vpc_id               = "vpc-xxx"                    # Replace with your VPC ID
-private_subnets      = ["subnet-xxx", "subnet-xxx"] # Replace with your private subnet IDs
-private_subnets_cidr = ["xxxx", "xxxx"]             # CIDRs for the private subnets
+vpc_id               = "vpc-0da33d20daf0991c9"                    # Replace with your VPC ID
+private_subnets      = ["subnet-03a728dd68184cbf0", "subnet-0454326c7fb260a21"] # Replace with your private subnet IDs
+private_subnets_cidr = ["10.0.128.0/20", "10.0.144.0/20"]             # CIDRs for the private subnets
 
-node_group_desired_size = 1
+node_group_desired_size = 2
 node_group_max_size     = 4
-node_group_min_size     = 1
-node_group_instance_types   = ["t3.medium"]
+node_group_min_size     = 2
+node_group_instance_types   = ["c5.4xlarge"]
 
 # RDS Configuration
 rds_instance_class        = "db.t3.micro"
@@ -21,16 +21,19 @@ rds_backup_window         = "07:00-09:00"
 rds_encryption_enabled    = false
 rds_kms_key_id            = ""
 
-# EFS Configuration
-efs_backup_enabled               = true
-efs_encryption_enabled           = true
-efs_lifecycle_policy_transition  = "AFTER_30_DAYS"
-efs_performance_mode             = "generalPurpose"
-efs_throughput_mode              = "bursting"
-efs_provisioned_throughput_mibps = 10
+# EFS Configuration enable_efs = false in case of ner-backend
+enable_efs = false
+
+# # Pass if enable_efs is true
+# efs_backup_enabled               = true
+# efs_encryption_enabled           = true
+# efs_lifecycle_policy_transition  = "AFTER_30_DAYS"
+# efs_performance_mode             = "generalPurpose"
+# efs_throughput_mode              = "bursting"
+# efs_provisioned_throughput_mibps = 10
 
 # Existing Resource Configuration (Optional)
-existing_efs_id       = ""
-existing_rds_endpoint = ""
-existing_rds_username = "myadmin"
-existing_rds_password = "mypassword"
+# existing_efs_id       = ""
+# existing_rds_endpoint = ""
+# existing_rds_username = "myadmin"
+# existing_rds_password = "mypassword"

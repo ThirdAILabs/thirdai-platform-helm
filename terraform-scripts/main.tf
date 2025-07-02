@@ -20,6 +20,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+variable "enable_efs" {
+  description = "Whether to create EFS resources"
+  type        = bool
+  default     = true
+}
+
 provider "local" {}
 
 resource "random_string" "unique_suffix" {
@@ -226,6 +232,9 @@ locals {
   rds_port     = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[1] : aws_db_instance.thirdai_platform_db[0].port
   rds_username = var.existing_rds_endpoint != "" ? var.existing_rds_username : var.rds_master_username
   rds_password = var.existing_rds_endpoint != "" ? var.existing_rds_password : var.rds_master_password
+
+  # EFS ID only if enabled
+  efs_id = var.enable_efs ? (var.existing_efs_id != "" ? var.existing_efs_id : aws_efs_file_system.thirdai_platform_efs[0].id) : ""
 }
 
 resource "aws_iam_role" "db_creator_lambda_role" {
@@ -284,8 +293,9 @@ resource "aws_lambda_invocation" "create_additional_dbs" {
   depends_on = [aws_lambda_function.create_db_lambda]
 }
 
+# Conditionally create EFS resources
 resource "aws_efs_file_system" "thirdai_platform_efs" {
-  count     = var.existing_efs_id != "" ? 0 : 1
+  count     = var.enable_efs && var.existing_efs_id == "" ? 1 : 0
   encrypted = var.efs_encryption_enabled
 
   lifecycle_policy {
@@ -308,25 +318,21 @@ resource "aws_efs_file_system" "thirdai_platform_efs" {
   }
 }
 
-locals {
-  efs_id = var.existing_efs_id != "" ? var.existing_efs_id : aws_efs_file_system.thirdai_platform_efs[0].id
-}
-
 resource "aws_efs_mount_target" "thirdai_platform_efs_mt" {
-  for_each        = toset(var.private_subnets)
+  for_each        = var.enable_efs ? toset(var.private_subnets) : toset([])
   file_system_id  = local.efs_id
   subnet_id       = each.value
   security_groups = [aws_security_group.thirdai_platform_sg.id]
 }
 
 resource "aws_efs_backup_policy" "thirdai_platform_efs_backup" {
+  count          = var.enable_efs ? 1 : 0
   file_system_id = local.efs_id
 
   backup_policy {
     status = var.efs_backup_enabled ? "ENABLED" : "DISABLED"
   }
 }
-
 resource "local_file" "deployment_config" {
   filename = "${path.module}/deployment_config.txt"
   content  = <<EOF

@@ -1,0 +1,80 @@
+replicaCount: 1
+
+# Docker credentials secret
+dockerCredentialsSecret: "docker-credentials-secret"
+
+service:
+  port: 80
+  type: ClusterIP
+
+ingress:
+  className: "nginx"
+  hostname: "${INGRESS_HOSTNAME}"      # injected by init.sh
+  path: "/api/v1"
+  tlsSecret: thirdai-platform-tls
+
+# License file secret reference
+licenseSecretName: "thirdai-platform-license"
+
+rabbitmq:
+  enabled: true
+  image:
+    repository: rabbitmq
+    tag: 3.11-management
+    pullPolicy: IfNotPresent
+  service:
+    port: 5672
+    managementPort: 15672
+  credentials:
+    username: user
+    password: password
+  persistence:
+    enabled: true
+    storageClass: "gp2"
+    accessMode: ReadWriteOnce
+    size: 1Gi
+
+database:
+  url: "${DATABASE_URL}"              # e.g. postgresql://…
+
+s3:
+  bucket: "${S3_BUCKET}"
+  region: "${S3_REGION}"
+  credentials:
+    accessKey: "${AWS_ACCESS_KEY_ID}"
+    secretKey: "${AWS_SECRET_ACCESS_KEY}"
+
+api:
+  enabled: true
+  image:
+    repository: "pocketshield.azurecr.io/pocket_shield_main"
+    tag: "v0.0.1"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8001
+  ingress:
+    enabled: true
+    host: "${INGRESS_HOSTNAME}"
+    path: "/api/v1"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "pocketshield.azurecr.io/pocket_shield_main"
+    tag: "v0.0.1"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi

@@ -1,6 +1,7 @@
 # General cluster configuration
 aws_region           = "us-west-1"
-cluster_name         = "ner-eks"
+cluster_name         = "ner-nick"
+s3_bucket_name       = "ner-backend-test-1"
 cluster_version      = "1.31"
 vpc_id               = "vpc-0da33d20daf0991c9"                    # Replace with your VPC ID
 private_subnets      = ["subnet-03a728dd68184cbf0", "subnet-0454326c7fb260a21"] # Replace with your private subnet IDs
@@ -21,19 +22,7 @@ rds_backup_window         = "07:00-09:00"
 rds_encryption_enabled    = false
 rds_kms_key_id            = ""
 
-# EFS Configuration enable_efs = false in case of ner-backend
-enable_efs = false
-
-# # Pass if enable_efs is true
-# efs_backup_enabled               = true
-# efs_encryption_enabled           = true
-# efs_lifecycle_policy_transition  = "AFTER_30_DAYS"
-# efs_performance_mode             = "generalPurpose"
-# efs_throughput_mode              = "bursting"
-# efs_provisioned_throughput_mibps = 10
-
 # Existing Resource Configuration (Optional)
-# existing_efs_id       = ""
 # existing_rds_endpoint = ""
 # existing_rds_username = "myadmin"
 # existing_rds_password = "mypassword"

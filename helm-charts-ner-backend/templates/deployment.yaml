@@ -59,7 +59,10 @@ spec:
         imagePullPolicy: {{ .Values.api.image.pullPolicy }}
         args: ["--head"]
         ports:
-          - containerPort: {{ .Values.api.service.port }}
+          - name: backend
+            containerPort: 8001
+          - name: frontend
+            containerPort: 3000
         env:
           - name: DATABASE_URL
             value: "{{ .Values.database.url }}"
@@ -67,10 +70,8 @@ spec:
             value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
           - name: S3_ENDPOINT_URL
             value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
-          - name: AWS_ACCESS_KEY_ID
-            value: "{{ .Values.s3.credentials.accessKey }}"
-          - name: AWS_SECRET_ACCESS_KEY
-            value: "{{ .Values.s3.credentials.secretKey }}"
+          - name: S3_REGION
+            value: "{{ .Values.s3.region }}"
         resources:
           requests:
             cpu: {{ .Values.api.resources.requests.cpu }}
@@ -110,10 +111,8 @@ spec:
             value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
           - name: S3_ENDPOINT_URL
             value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
-          - name: AWS_ACCESS_KEY_ID
-            value: "{{ .Values.s3.credentials.accessKey }}"
-          - name: AWS_SECRET_ACCESS_KEY
-            value: "{{ .Values.s3.credentials.secretKey }}"
+          - name: S3_REGION
+            value: "{{ .Values.s3.region }}"
         resources:
           requests:
             cpu: {{ .Values.worker.resources.requests.cpu }}

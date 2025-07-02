@@ -10,6 +10,11 @@ variable "cluster_name" {
   default     = "thirdai-eks"
 }
 
+variable "s3_bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
+}
+
 variable "cluster_version" {
   description = "Kubernetes version for EKS cluster"
   type        = string
@@ -100,48 +105,6 @@ variable "rds_encryption_enabled" {
 
 variable "rds_kms_key_id" {
   description = "KMS Key ID for RDS encryption (if applicable)"
-  type        = string
-  default     = ""
-}
-
-variable "efs_backup_enabled" {
-  description = "Enable backups for the EFS file system"
-  type        = bool
-  default     = true
-}
-
-variable "efs_encryption_enabled" {
-  description = "Enable encryption for the EFS file system"
-  type        = bool
-  default     = true
-}
-
-variable "efs_lifecycle_policy_transition" {
-  description = "EFS lifecycle policy transition timing (e.g. AFTER_30_DAYS)"
-  type        = string
-  default     = "AFTER_30_DAYS"
-}
-
-variable "efs_performance_mode" {
-  description = "EFS performance mode"
-  type        = string
-  default     = "generalPurpose"
-}
-
-variable "efs_throughput_mode" {
-  description = "EFS throughput mode"
-  type        = string
-  default     = "bursting"
-}
-
-variable "efs_provisioned_throughput_mibps" {
-  description = "Provisioned throughput (MiBps) for EFS (only if throughput_mode is provisioned)"
-  type        = number
-  default     = 10
-}
-
-variable "existing_efs_id" {
-  description = "If you want to reuse an existing EFS, provide its File System ID here"
   type        = string
   default     = ""
 }

@@ -54,24 +54,32 @@ source "$DEPLOYMENT_CONFIG"
 #   rds_endpoint
 #   rds_username
 #   rds_password
-#   modelbazaar_db_uri
+#   s3_bucket_name
+#   aws_region
+#   database_uri
 #   cluster_autoscaler_role_name
 
 #####################################
 # EXPORT FOR HELM VALUES            #
 #####################################
-export DATABASE_URL="$modelbazaar_db_uri"
+export DATABASE_URL="$database_uri"
+export S3_BUCKET="$s3_bucket_name"
+export S3_REGION="$aws_region"
 
+echo "S3 Bucket: $S3_BUCKET, S3 Region: $S3_REGION"
 
 # S3 bucket & region
-export S3_BUCKET="${S3_BUCKET:-}"
-export S3_REGION="${S3_REGION:-}"
-if [[ -z "$S3_BUCKET" ]]; then
-  read -p "Enter your S3 bucket name: " S3_BUCKET
-fi
-if [[ -z "$S3_REGION" ]]; then
-  read -p "Enter your S3 region: " S3_REGION
-fi
+# export S3_BUCKET="${S3_BUCKET:-}"
+# export S3_REGION="${S3_REGION:-}"
+# if [[ -z "$S3_BUCKET" ]]; then
+#   read -p "Enter your S3 bucket name: " S3_BUCKET
+# fi
+# if [[ -z "$S3_REGION" ]]; then
+#   read -p "Enter your S3 region: " S3_REGION
+# fi
+
+export AWS_ACCESS_KEY_ID="AKIAS47WSFVAIRHLXWS7"
+export AWS_SECRET_ACCESS_KEY="RHpqmuE6TroRQ4WgwsceGF2OBCO1F/cuWROL30yU"
 
 # AWS creds (used for S3 in your chart)
 : "${AWS_ACCESS_KEY_ID:?Must set AWS_ACCESS_KEY_ID}"

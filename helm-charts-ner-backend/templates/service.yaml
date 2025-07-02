@@ -26,8 +26,12 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: {{ .Values.api.service.port }}
-      targetPort: {{ .Values.api.service.port }}
+    - name: backend
+      port: 8001
+      targetPort: backend
+    - name: frontend
+      port: 3001
+      targetPort: frontend
   selector:
     app: {{ include "ner-backend.fullname" . }}-api
 {{- end }}

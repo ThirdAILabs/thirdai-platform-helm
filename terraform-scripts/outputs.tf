@@ -13,11 +13,6 @@ output "eks_cluster_endpoint" {
   value       = module.eks.cluster_endpoint
 }
 
-output "efs_file_system_id" {
-  description = "The EFS File System ID."
-  value       = local.efs_id
-}
-
 output "rds_endpoint" {
   description = "The RDS endpoint."
   value       = local.rds_endpoint

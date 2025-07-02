@@ -48,7 +48,7 @@ api:
   enabled: true
   image:
     repository: "pocketshield.azurecr.io/pocket_shield_main"
-    tag: "v0.0.1"
+    tag: "v0.0.3"
     pullPolicy: IfNotPresent
   service:
     port: 8001
@@ -69,7 +69,7 @@ worker:
   replicaCount: 1
   image:
     repository: "pocketshield.azurecr.io/pocket_shield_main"
-    tag: "v0.0.1"
+    tag: "v0.0.3"
     pullPolicy: IfNotPresent
   resources:
     requests:

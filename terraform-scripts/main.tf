@@ -20,12 +20,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-variable "enable_efs" {
-  description = "Whether to create EFS resources"
-  type        = bool
-  default     = true
-}
-
 provider "local" {}
 
 resource "random_string" "unique_suffix" {
@@ -59,17 +53,6 @@ module "eks" {
     aws-ebs-csi-driver = {
       version = "latest"
     }
-    aws-efs-csi-driver = {
-      cluster_identity_oidc_issuer     = module.eks.cluster_oidc_issuer_url
-      cluster_identity_oidc_issuer_arn = module.eks.oidc_provider_arn
-      cluster_name                     = module.eks.cluster_name
-      version                          = "latest"
-      settings = {
-        controller = {
-          fsGroupPolicy = "ReadWriteMany"
-        }
-      }
-    }
   }
 
   eks_managed_node_groups = {
@@ -86,8 +69,7 @@ module "eks" {
 
       iam_role_additional_policies = {
         AmazonEBSCSIDriverPolicy          = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
-        AmazonEFSCSIDriverPolicy          = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy",
-        AmazonElasticFileSystemFullAccess = "arn:aws:iam::aws:policy/AmazonElasticFileSystemFullAccess"
+        S3AccessPolicy                    = aws_iam_policy.eks_s3_access_policy.arn
       }
     }
   }
@@ -111,7 +93,7 @@ resource "aws_security_group_rule" "eks_nodes_allow_all_tcp" {
 
 resource "aws_security_group" "thirdai_platform_sg" {
   name        = "thirdai-platform-sg-${random_string.unique_suffix.result}"
-  description = "Security group for RDS and EFS access for ThirdAI Platform"
+  description = "Security group for RDS access for ThirdAI Platform"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -204,7 +186,7 @@ resource "aws_db_instance" "thirdai_platform_db" {
   engine                 = "postgres"
   engine_version         = "14.17"
   instance_class         = var.rds_instance_class
-  db_name                = "modelbazaar"
+  db_name                = "nerbackend"
   identifier             = "${var.cluster_name}-rds-${random_string.unique_suffix.result}"
   username               = var.rds_master_username
   password               = var.rds_master_password
@@ -232,117 +214,54 @@ locals {
   rds_port     = var.existing_rds_endpoint != "" ? split(":", var.existing_rds_endpoint)[1] : aws_db_instance.thirdai_platform_db[0].port
   rds_username = var.existing_rds_endpoint != "" ? var.existing_rds_username : var.rds_master_username
   rds_password = var.existing_rds_endpoint != "" ? var.existing_rds_password : var.rds_master_password
-
-  # EFS ID only if enabled
-  efs_id = var.enable_efs ? (var.existing_efs_id != "" ? var.existing_efs_id : aws_efs_file_system.thirdai_platform_efs[0].id) : ""
 }
 
-resource "aws_iam_role" "db_creator_lambda_role" {
-  name = "db-creator-lambda-role-${random_string.unique_suffix.result}"
-  assume_role_policy = jsonencode({
+resource "aws_s3_bucket" "thirdai_platform_bucket" {
+  bucket = var.s3_bucket_name
+
+  tags = {
+    Name = var.s3_bucket_name
+  }
+}
+
+resource "aws_iam_policy" "eks_s3_access_policy" {
+  name        = "${var.cluster_name}-s3-access-policy"
+  description = "Policy to allow EKS cluster to access S3 bucket"
+  policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Action = "sts:AssumeRole",
         Effect = "Allow",
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:CreateBucket",
+          "s3:ListBucket"
+        ],
+        Resource = [
+          "arn:aws:s3:::${var.s3_bucket_name}",
+          "arn:aws:s3:::${var.s3_bucket_name}/*"
+        ]
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  role       = aws_iam_role.db_creator_lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Attach the s3 bucket access policy to the EKS cluster role
+# resource "aws_iam_role_policy_attachment" "eks_worker_s3_access" {
+# role       = module.eks.node_groups["main"].iam_role_name
+#  policy_arn = aws_iam_policy.eks_s3_access_policy.arn
+#}
 
-resource "aws_lambda_function" "create_db_lambda" {
-  filename      = "create_db_lambda.zip"
-  function_name = "create-db-lambda-${random_string.unique_suffix.result}"
-  role          = aws_iam_role.db_creator_lambda_role.arn
-  handler       = "index.handler"
-  runtime       = "nodejs18.x"
-  timeout       = 60
-
-  vpc_config {
-    subnet_ids         = var.private_subnets
-    security_group_ids = [aws_security_group.thirdai_platform_sg.id]
-  }
-
-  environment {
-    variables = {
-      DB_HOST     = local.rds_hostname
-      DB_PORT     = local.rds_port
-      DB_USERNAME = local.rds_username
-      DB_PASSWORD = local.rds_password
-      DB_NAME     = "modelbazaar"
-    }
-  }
-
-  depends_on = [aws_db_instance.thirdai_platform_db]
-}
-
-resource "aws_lambda_invocation" "create_additional_dbs" {
-  function_name = aws_lambda_function.create_db_lambda.function_name
-  input = jsonencode({
-    create_dbs = ["grafana", "keycloak"]
-  })
-
-  depends_on = [aws_lambda_function.create_db_lambda]
-}
-
-# Conditionally create EFS resources
-resource "aws_efs_file_system" "thirdai_platform_efs" {
-  count     = var.enable_efs && var.existing_efs_id == "" ? 1 : 0
-  encrypted = var.efs_encryption_enabled
-
-  lifecycle_policy {
-    transition_to_ia = var.efs_lifecycle_policy_transition
-  }
-
-  performance_mode                = var.efs_performance_mode
-  throughput_mode                 = var.efs_throughput_mode
-  provisioned_throughput_in_mibps = var.efs_throughput_mode == "provisioned" ? var.efs_provisioned_throughput_mibps : null
-
-  tags = {
-    Name = "${var.cluster_name}-efs-${random_string.unique_suffix.result}"
-  }
-
-  lifecycle {
-    ignore_changes = [
-      throughput_mode,
-      provisioned_throughput_in_mibps
-    ]
-  }
-}
-
-resource "aws_efs_mount_target" "thirdai_platform_efs_mt" {
-  for_each        = var.enable_efs ? toset(var.private_subnets) : toset([])
-  file_system_id  = local.efs_id
-  subnet_id       = each.value
-  security_groups = [aws_security_group.thirdai_platform_sg.id]
-}
-
-resource "aws_efs_backup_policy" "thirdai_platform_efs_backup" {
-  count          = var.enable_efs ? 1 : 0
-  file_system_id = local.efs_id
-
-  backup_policy {
-    status = var.efs_backup_enabled ? "ENABLED" : "DISABLED"
-  }
-}
 resource "local_file" "deployment_config" {
   filename = "${path.module}/deployment_config.txt"
   content  = <<EOF
-efs_file_system_id="${local.efs_id}"
 rds_endpoint="${local.rds_endpoint}"
 rds_username="${local.rds_username}"
 rds_password="${local.rds_password}"
-modelbazaar_db_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/modelbazaar"
-keycloak_db_uri="postgresql://${local.rds_endpoint}/keycloak"
-grafana_db_uri="postgres://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/grafana?sslmode=require"
+s3_bucket_name="${var.s3_bucket_name}"
+aws_region="${var.aws_region}"
+database_uri="postgresql://${local.rds_username}:${local.rds_password}@${local.rds_endpoint}/nerbackend"
 cluster_autoscaler_role_name="${var.cluster_name}-autoscaler-role-${random_string.unique_suffix.result}"
 EOF
 }

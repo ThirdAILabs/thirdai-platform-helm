@@ -18,6 +18,13 @@ spec:
               service:
                 name: {{ include "ner-backend.fullname" . }}-api
                 port:
-                  number: {{ .Values.api.service.port }}
+                  name: backend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ner-backend.fullname" . }}-api
+                port:
+                  name: frontend
 {{- end }}
 

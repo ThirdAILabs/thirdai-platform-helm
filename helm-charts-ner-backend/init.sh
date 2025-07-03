@@ -78,8 +78,6 @@ echo "S3 Bucket: $S3_BUCKET, S3 Region: $S3_REGION"
 #   read -p "Enter your S3 region: " S3_REGION
 # fi
 
-export AWS_ACCESS_KEY_ID="AKIAS47WSFVAIRHLXWS7"
-export AWS_SECRET_ACCESS_KEY="RHpqmuE6TroRQ4WgwsceGF2OBCO1F/cuWROL30yU"
 
 # AWS creds (used for S3 in your chart)
 : "${AWS_ACCESS_KEY_ID:?Must set AWS_ACCESS_KEY_ID}"

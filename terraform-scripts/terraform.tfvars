@@ -1,7 +1,7 @@
 # General cluster configuration
 aws_region           = "us-west-1"
-cluster_name         = "ner-nick"
-s3_bucket_name       = "ner-backend-test-1"
+cluster_name         = "ner-eks"
+s3_bucket_name       = "ner-backend-test-2"
 cluster_version      = "1.31"
 vpc_id               = "vpc-0da33d20daf0991c9"                    # Replace with your VPC ID
 private_subnets      = ["subnet-03a728dd68184cbf0", "subnet-0454326c7fb260a21"] # Replace with your private subnet IDs

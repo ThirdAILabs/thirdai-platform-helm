@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "ner-backend.fullname" . }}-rabbitmq
+spec:
+  capacity:
+    storage: {{ .Values.rabbitmq.persistence.size }}
+  storageClassName: {{ .Values.rabbitmq.persistence.storageClass | quote }}
+  accessModes:
+    - {{ .Values.rabbitmq.persistence.accessMode }}
+  # persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /data/rabbitmq

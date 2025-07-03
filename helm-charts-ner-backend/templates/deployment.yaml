@@ -84,10 +84,12 @@ spec:
             value: "{{ .Values.database.url }}"
           - name: RABBITMQ_URL
             value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
-          - name: S3_ENDPOINT_URL
-            value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
+          # - name: S3_ENDPOINT_URL
+          #   value: "https://s3.{{ .Values.s3.region }}.amazonaws.com"
           - name: S3_REGION
             value: "{{ .Values.s3.region }}"
+          - name: BUCKET_NAME
+            value: "{{ .Values.s3.bucket }}"
           - name: LICENSE_KEY
             value: "{{ .Values.licenseKey }}"
         resources:
@@ -127,10 +129,12 @@ spec:
             value: "{{ .Values.database.url }}"
           - name: RABBITMQ_URL
             value: 'amqp://{{ .Values.rabbitmq.credentials.username }}:{{ .Values.rabbitmq.credentials.password }}@{{ include "ner-backend.fullname" . }}-rabbitmq:{{ .Values.rabbitmq.service.port }}/'
-          - name: S3_ENDPOINT_URL
-            value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
+          # - name: S3_ENDPOINT_URL
+          #   value: "https://s3.{{ .Values.s3.region }}.amazonaws.com/{{ .Values.s3.bucket }}"
           - name: S3_REGION
             value: "{{ .Values.s3.region }}"
+          - name: BUCKET_NAME
+            value: "{{ .Values.s3.bucket }}"
           - name: LICENSE_KEY
             value: "{{ .Values.licenseKey }}"
         resources:

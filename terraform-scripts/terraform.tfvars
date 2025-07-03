@@ -1,7 +1,7 @@
 # General cluster configuration
 aws_region           = "us-west-1"
-cluster_name         = "ner-eks"
-s3_bucket_name       = "ner-backend-test-2"
+cluster_name         = "ner-eks2"
+s3_bucket_name       = "ner-backend-test-1"
 cluster_version      = "1.31"
 vpc_id               = "vpc-0da33d20daf0991c9"                    # Replace with your VPC ID
 private_subnets      = ["subnet-03a728dd68184cbf0", "subnet-0454326c7fb260a21"] # Replace with your private subnet IDs
@@ -10,7 +10,7 @@ private_subnets_cidr = ["10.0.128.0/20", "10.0.144.0/20"]             # CIDRs fo
 node_group_desired_size = 2
 node_group_max_size     = 4
 node_group_min_size     = 2
-node_group_instance_types   = ["c5.4xlarge"]
+node_group_instance_types   = ["c5.2xlarge"]
 
 # RDS Configuration
 rds_instance_class        = "db.t3.micro"

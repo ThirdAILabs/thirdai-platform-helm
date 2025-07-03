@@ -1,5 +1,14 @@
 {{- if .Values.rabbitmq.enabled }}
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ner-backend.fullname" . }}-rabbitmq-config
+data:
+  rabbitmq.conf: |
+    # bump timeout to 300 minutes (18 000 000 ms) for longer finetuning task
+    consumer_timeout = 18000000
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,10 +38,17 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /var/lib/rabbitmq
+          - name: config-volume
+            mountPath: /etc/rabbitmq/rabbitmq.conf
+            subPath: rabbitmq.conf
+            readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "ner-backend.fullname" . }}-rabbitmq
+        - name: config-volume
+          configMap:
+            name: {{ include "ner-backend.fullname" . }}-rabbitmq-config
 {{- end }}
 
 {{- if .Values.api.enabled }}
